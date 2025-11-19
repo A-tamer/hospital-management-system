@@ -26,8 +26,6 @@ export const FirebaseService = {
   },
 
   async addPatient(patient: Omit<Patient, 'id'>): Promise<string> {
-    console.log("🧠 Raw patient before cleaning:", patient);
-  
     // Remove undefined or invalid values completely
     const sanitizedPatient = Object.entries(patient).reduce((acc, [key, value]) => {
       if (value !== undefined && value !== null) {
@@ -39,27 +37,24 @@ export const FirebaseService = {
     // Set safe defaults for any missing fields while preserving extra fields
     const finalPatient = {
       ...sanitizedPatient,
-      fullName: sanitizedPatient.fullName || 'Unknown',
+      fullNameArabic: sanitizedPatient.fullNameArabic || sanitizedPatient.fullName || 'Unknown',
       code: sanitizedPatient.code || '',
       age: sanitizedPatient.age || '',
       gender: sanitizedPatient.gender || '',
       diagnosis: sanitizedPatient.diagnosis || '',
-      status: sanitizedPatient.status || 'Active',
-      admissionDate: sanitizedPatient.admissionDate || null,
-      dischargeDate: sanitizedPatient.dischargeDate || null,
+      status: sanitizedPatient.status || 'Diagnosed',
+      visitedDate: sanitizedPatient.visitedDate || sanitizedPatient.admissionDate || null,
+      admissionDate: sanitizedPatient.visitedDate || sanitizedPatient.admissionDate || null, // Keep for backward compatibility
       notes: sanitizedPatient.notes ?? '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     } as any;
   
-    console.log("✅ Clean patient being added:", finalPatient);
-  
     try {
       const docRef = await addDoc(collection(db, "patients"), finalPatient);
-      console.log("🎉 Patient added successfully:", docRef.id);
       return docRef.id;
     } catch (error) {
-      console.error("🔥 Firestore Add Error:", error);
+      console.error("Error adding patient to Firestore:", error);
       throw error;
     }
   },
@@ -72,15 +67,9 @@ export const FirebaseService = {
       const safeName = `${Date.now()}-${sanitizedName}`;
       const objectPath = `patients/${patientCode}/${folder}/${safeName}`;
       
-      console.log('Uploading to path:', objectPath);
       const storageRef = ref(storage, objectPath);
-      
-      console.log('Uploading file...', file.name, file.size, 'bytes');
       await uploadBytes(storageRef, file);
-      console.log('File uploaded, getting download URL...');
-      
       const url = await getDownloadURL(storageRef);
-      console.log('Download URL obtained:', url);
       
       return url;
     } catch (error) {
@@ -130,9 +119,11 @@ export const FirebaseService = {
 
   async addUser(user: Omit<User, 'id'>): Promise<string> {
     const safeUser = {
-      fullName: user.name || 'Unnamed User',
+      name: user.name || 'Unnamed User',
       email: user.email || '',
-      role: user.role || 'staff',
+      password: user.password || '',
+      role: user.role || 'user',
+      canViewFinancial: user.canViewFinancial || false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

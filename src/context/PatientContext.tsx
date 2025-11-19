@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { Patient, User, FilterOptions } from '../types';
-import { initializeSampleData } from '../utils/sampleData';
+import { Patient, User, SafeUser, FilterOptions } from '../types';
 import { FirebaseService } from '../services/firebaseService';
+import { initializeDummyData } from '../utils/initializeData';
+import { getSession, clearSession, extendSession, saveSession } from '../utils/sessionManager';
 
 interface PatientState {
   patients: Patient[];
   users: User[];
-  currentUser: User | null;
+  currentUser: SafeUser | null;
   isLoading: boolean;
   filters: FilterOptions;
   isOnline: boolean;
@@ -20,7 +21,7 @@ type PatientAction =
   | { type: 'UPDATE_PATIENT'; payload: Patient }
   | { type: 'DELETE_PATIENT'; payload: string }
   | { type: 'SET_FILTERS'; payload: Partial<FilterOptions> }
-  | { type: 'SET_CURRENT_USER'; payload: User | null }
+  | { type: 'SET_CURRENT_USER'; payload: SafeUser | null }
   | { type: 'SET_USERS'; payload: User[] }
   | { type: 'SET_ONLINE_STATUS'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null };
@@ -92,7 +93,8 @@ export const PatientProvider: React.FC<{ children: React.ReactNode }> = ({ child
         dispatch({ type: 'SET_LOADING', payload: true });
         dispatch({ type: 'SET_ERROR', payload: null });
 
-        
+        // Initialize dummy data if database is empty
+        await initializeDummyData();
 
         // Set up real-time listeners
         const unsubscribePatients = FirebaseService.subscribeToPatients((patients) => {
@@ -104,9 +106,21 @@ export const PatientProvider: React.FC<{ children: React.ReactNode }> = ({ child
           dispatch({ type: 'SET_USERS', payload: users });
         });
 
-        // Load current user from localStorage (for session persistence)
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-        dispatch({ type: 'SET_CURRENT_USER', payload: currentUser });
+        // Load current user from session (for session persistence)
+        const session = getSession();
+        if (session && session.user) {
+          dispatch({ type: 'SET_CURRENT_USER', payload: session.user });
+          // Extend session on activity
+          extendSession();
+        } else {
+          // Fallback to old localStorage for backward compatibility
+          const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+          if (currentUser) {
+            dispatch({ type: 'SET_CURRENT_USER', payload: currentUser });
+            // Migrate to session
+            saveSession(currentUser);
+          }
+        }
 
         // Monitor online status
         const handleOnline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
@@ -129,7 +143,6 @@ export const PatientProvider: React.FC<{ children: React.ReactNode }> = ({ child
         
         // Fallback to localStorage if Firebase fails
         try {
-          initializeSampleData();
           const patients = JSON.parse(localStorage.getItem('patients') || '[]');
           const users = JSON.parse(localStorage.getItem('users') || '[]');
           const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
@@ -147,9 +160,28 @@ export const PatientProvider: React.FC<{ children: React.ReactNode }> = ({ child
     initializeFirebase();
   }, []);
 
-  // Save current user to localStorage whenever it changes
+  // Save current user to session whenever it changes
   useEffect(() => {
-    localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+    if (state.currentUser) {
+      saveSession(state.currentUser);
+      localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+    } else {
+      clearSession();
+    }
+  }, [state.currentUser]);
+
+  // Check session validity periodically
+  useEffect(() => {
+    const checkSession = () => {
+      const session = getSession();
+      if (!session && state.currentUser) {
+        dispatch({ type: 'SET_CURRENT_USER', payload: null });
+        clearSession();
+      }
+    };
+
+    const interval = setInterval(checkSession, 60000); // Check every minute
+    return () => clearInterval(interval);
   }, [state.currentUser]);
 
   return (

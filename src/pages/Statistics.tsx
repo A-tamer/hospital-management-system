@@ -24,6 +24,7 @@ import {
 import { usePatientContext } from '../context/PatientContext';
 import { generatePDFReport } from '../utils/pdfGenerator';
 import { DashboardStats } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 // Register Chart.js components
 ChartJS.register(
@@ -40,6 +41,7 @@ ChartJS.register(
 
 const Statistics: React.FC = () => {
   const { state } = usePatientContext();
+  const { t } = useLanguage();
 
   const chartData = useMemo(() => {
     const patients = state.patients;
@@ -58,7 +60,9 @@ const Statistics: React.FC = () => {
 
     // Monthly admissions (last 12 months)
     const monthlyData = patients.reduce((acc, patient) => {
-      const date = new Date(patient.admissionDate);
+      const dateField = patient.visitedDate || (patient as any).admissionDate;
+      if (!dateField) return acc;
+      const date = new Date(dateField);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       acc[monthKey] = (acc[monthKey] || 0) + 1;
       return acc;
@@ -272,11 +276,11 @@ const Statistics: React.FC = () => {
   const handleExportPDF = () => {
     const statsData: DashboardStats = {
       totalPatients: state.patients.length,
-      activePatients: state.patients.filter(p => p.status === 'Active').length,
-      recoveredPatients: state.patients.filter(p => p.status === 'Recovered').length,
-      inactivePatients: state.patients.filter(p => p.status === 'Inactive').length,
+      diagnosedPatients: state.patients.filter(p => p.status === 'Diagnosed').length,
+      preOpPatients: state.patients.filter(p => p.status === 'Pre-op').length,
+      postOpPatients: state.patients.filter(p => p.status === 'Post-op').length,
       patientsByDiagnosis: chartData.diagnosisData,
-      monthlyAdmissions: chartData.monthlyData.reduce((acc, item) => {
+      monthlyVisits: chartData.monthlyData.reduce((acc, item) => {
         acc[item.label] = item.count;
         return acc;
       }, {} as { [key: string]: number }),
@@ -286,20 +290,20 @@ const Statistics: React.FC = () => {
   };
 
   return (
-    <div className="statistics-page fade-in">
+    <div className="statistics-page fade-in" style={{ padding: '2rem' }}>
       <div className="page-header">
         <div className="page-title-section">
-          <h1 className="page-title">Statistics & Analytics</h1>
-          <p className="page-subtitle">Comprehensive analysis of patient data and trends</p>
+          <h1 className="page-title">{t('stats.title')}</h1>
+          <p className="page-subtitle">{t('stats.subtitle')}</p>
         </div>
         <div className="page-actions">
           <button className="btn btn-secondary" onClick={handleExportData}>
             <Download className="btn-icon" />
-            Export JSON
+            {t('stats.exportJSON')}
           </button>
           <button className="btn btn-primary" onClick={handleExportPDF}>
             <Download className="btn-icon" />
-            Export PDF
+            {t('stats.exportPDF')}
           </button>
         </div>
       </div>
@@ -312,7 +316,7 @@ const Statistics: React.FC = () => {
           </div>
           <div className="stats-content">
             <div className="stats-number">{state.patients.length}</div>
-            <div className="stats-label">Total Patients</div>
+            <div className="stats-label">{t('stats.totalPatients')}</div>
           </div>
         </div>
 
@@ -324,7 +328,7 @@ const Statistics: React.FC = () => {
             <div className="stats-number">
               {Object.values(chartData.statusData).reduce((a, b) => a + b, 0) - (chartData.statusData['Recovered'] || 0)}
             </div>
-            <div className="stats-label">Active Cases</div>
+            <div className="stats-label">{t('stats.activeCases')}</div>
           </div>
         </div>
 
@@ -336,7 +340,7 @@ const Statistics: React.FC = () => {
             <div className="stats-number">
               {chartData.monthlyData[chartData.monthlyData.length - 1]?.count || 0}
             </div>
-            <div className="stats-label">This Month</div>
+            <div className="stats-label">{t('stats.thisMonth')}</div>
           </div>
         </div>
 
@@ -348,7 +352,7 @@ const Statistics: React.FC = () => {
             <div className="stats-number">
               {Object.keys(chartData.diagnosisData).length}
             </div>
-            <div className="stats-label">Diagnoses</div>
+            <div className="stats-label">{t('stats.diagnoses')}</div>
           </div>
         </div>
       </div>
@@ -360,7 +364,7 @@ const Statistics: React.FC = () => {
           <div className="card-header">
             <h2 className="card-title">
               <BarChart3 className="card-title-icon" />
-              Diagnosis Distribution
+              {t('stats.diagnosisDistribution')}
             </h2>
           </div>
           <div className="chart-container">
@@ -373,7 +377,7 @@ const Statistics: React.FC = () => {
           <div className="card-header">
             <h2 className="card-title">
               <PieChart className="card-title-icon" />
-              Patient Status
+              {t('stats.patientStatus')}
             </h2>
           </div>
           <div className="chart-container">
@@ -388,7 +392,7 @@ const Statistics: React.FC = () => {
           <div className="card-header">
             <h2 className="card-title">
               <TrendingUp className="card-title-icon" />
-              Monthly Admissions Trend
+              {t('stats.monthlyTrends')}
             </h2>
           </div>
           <div className="chart-container">
@@ -401,7 +405,7 @@ const Statistics: React.FC = () => {
           <div className="card-header">
             <h2 className="card-title">
               <Users className="card-title-icon" />
-              Age Distribution
+              {t('stats.ageDistribution')}
             </h2>
           </div>
           <div className="chart-container">
@@ -413,11 +417,11 @@ const Statistics: React.FC = () => {
       {/* Detailed Statistics Table */}
       <div className="card">
         <div className="card-header">
-          <h2 className="card-title">Detailed Statistics</h2>
+          <h2 className="card-title">{t('stats.detailedStats')}</h2>
         </div>
         <div className="stats-table">
           <div className="stats-table-row">
-            <div className="stats-table-label">Most Common Diagnosis</div>
+            <div className="stats-table-label">{t('stats.mostCommonDiagnosis')}</div>
             <div className="stats-table-value">
               {Object.entries(chartData.diagnosisData).reduce((a, b) => 
                 chartData.diagnosisData[a[0]] > chartData.diagnosisData[b[0]] ? a : b, 
@@ -426,15 +430,15 @@ const Statistics: React.FC = () => {
             </div>
           </div>
           <div className="stats-table-row">
-            <div className="stats-table-label">Average Age</div>
+            <div className="stats-table-label">{t('stats.averageAge')}</div>
             <div className="stats-table-value">
               {state.patients.length > 0 
                 ? Math.round(state.patients.reduce((sum, p) => sum + p.age, 0) / state.patients.length)
-                : 0} years
+                : 0} {t('stats.years')}
             </div>
           </div>
           <div className="stats-table-row">
-            <div className="stats-table-label">Recovery Rate</div>
+            <div className="stats-table-label">{t('stats.recoveryRate')}</div>
             <div className="stats-table-value">
               {state.patients.length > 0 
                 ? Math.round(((chartData.statusData['Recovered'] || 0) / state.patients.length) * 100)
@@ -442,7 +446,7 @@ const Statistics: React.FC = () => {
             </div>
           </div>
           <div className="stats-table-row">
-            <div className="stats-table-label">Peak Month</div>
+            <div className="stats-table-label">{t('stats.peakMonth')}</div>
             <div className="stats-table-value">
               {chartData.monthlyData.reduce((a, b) => a.count > b.count ? a : b, { label: 'None', count: 0 }).label}
             </div>

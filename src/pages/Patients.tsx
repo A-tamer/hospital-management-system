@@ -8,19 +8,30 @@ import {
   Download,
   Users,
   SortAsc,
-  SortDesc
+  SortDesc,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { Patient, FilterOptions } from '../types';
 import PatientForm from '../components/PatientForm';
 import { generatePDFReport } from '../utils/pdfGenerator';
+import { useLanguage } from '../context/LanguageContext';
+import { useToast } from '../components/Toast';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 const Patients: React.FC = () => {
   const { state, dispatch } = usePatientContext();
+  const { t } = useLanguage();
+  const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
 
   // Check if we need to open edit form from navigation state
   useEffect(() => {
@@ -48,11 +59,12 @@ const Patients: React.FC = () => {
   const filteredPatients = useMemo(() => {
     let filtered = state.patients;
 
-    // Search filter
+    // Search filter - supports both English and Arabic names
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
+      const searchArabic = filters.search; // Keep original for Arabic search
       filtered = filtered.filter(patient =>
-        patient.fullName.toLowerCase().includes(searchLower) ||
+        (patient.fullNameArabic && patient.fullNameArabic.includes(searchArabic)) ||
         patient.code.toLowerCase().includes(searchLower) ||
         patient.diagnosis.toLowerCase().includes(searchLower)
       );
@@ -68,19 +80,21 @@ const Patients: React.FC = () => {
       filtered = filtered.filter(patient => patient.status === filters.status);
     }
 
-    // Year filter
+    // Year filter (using visitedDate)
     if (filters.year) {
       filtered = filtered.filter(patient => {
-        const d = new Date(patient.admissionDate);
-        const admissionYear = d.getFullYear().toString();
-        return admissionYear === filters.year;
+        const dateField = patient.visitedDate || (patient as any).admissionDate;
+        const d = new Date(dateField);
+        const year = d.getFullYear().toString();
+        return year === filters.year;
       });
     }
 
     // Month filter (01..12)
     if (filters.month) {
       filtered = filtered.filter(patient => {
-        const d = new Date(patient.admissionDate);
+        const dateField = patient.visitedDate || (patient as any).admissionDate;
+        const d = new Date(dateField);
         const month = String(d.getMonth() + 1).padStart(2, '0');
         return month === filters.month;
       });
@@ -93,20 +107,22 @@ const Patients: React.FC = () => {
 
       switch (filters.sortBy) {
         case 'name':
-          aValue = a.fullName.toLowerCase();
-          bValue = b.fullName.toLowerCase();
+          aValue = (a.fullNameArabic || '').toLowerCase();
+          bValue = (b.fullNameArabic || '').toLowerCase();
           break;
         case 'date':
-          aValue = new Date(a.admissionDate).getTime();
-          bValue = new Date(b.admissionDate).getTime();
+          const aDate = a.visitedDate || (a as any).admissionDate;
+          const bDate = b.visitedDate || (b as any).admissionDate;
+          aValue = new Date(aDate).getTime();
+          bValue = new Date(bDate).getTime();
           break;
         case 'status':
           aValue = a.status;
           bValue = b.status;
           break;
         default:
-          aValue = a.fullName.toLowerCase();
-          bValue = b.fullName.toLowerCase();
+          aValue = (a.fullNameArabic || '').toLowerCase();
+          bValue = (b.fullNameArabic || '').toLowerCase();
       }
 
       if (filters.sortOrder === 'asc') {
@@ -124,23 +140,44 @@ const Patients: React.FC = () => {
   }, [state.patients]);
 
   const uniqueYears = useMemo(() => {
-    return Array.from(new Set(state.patients.map(p => 
-      new Date(p.admissionDate).getFullYear().toString()
-    ))).sort((a, b) => b.localeCompare(a));
+    return Array.from(new Set(state.patients.map(p => {
+      const dateField = p.visitedDate || (p as any).admissionDate;
+      return new Date(dateField).getFullYear().toString();
+    }))).sort((a, b) => b.localeCompare(a));
   }, [state.patients]);
 
   const uniqueMonths = useMemo(() => {
     const months = new Set(
       state.patients
-        .filter(p => !filters.year || new Date(p.admissionDate).getFullYear().toString() === filters.year)
-        .map(p => String(new Date(p.admissionDate).getMonth() + 1).padStart(2, '0'))
+        .filter(p => {
+          const dateField = p.visitedDate || (p as any).admissionDate;
+          return !filters.year || new Date(dateField).getFullYear().toString() === filters.year;
+        })
+        .map(p => {
+          const dateField = p.visitedDate || (p as any).admissionDate;
+          return String(new Date(dateField).getMonth() + 1).padStart(2, '0');
+        })
     );
     return Array.from(months).sort();
   }, [state.patients, filters.year]);
 
   const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this patient record?')) {
-      dispatch({ type: 'DELETE_PATIENT', payload: id });
+    setPatientToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (patientToDelete) {
+      dispatch({ type: 'DELETE_PATIENT', payload: patientToDelete });
+      showSuccess(t('patients.patientDeleted') || 'Patient record removed successfully');
+      setShowDeleteConfirm(false);
+      setPatientToDelete(null);
+      // Reset to first page if current page becomes empty
+      const remainingPatients = filteredPatients.filter(p => p.id !== patientToDelete);
+      const maxPage = Math.ceil(remainingPatients.length / itemsPerPage);
+      if (currentPage > maxPage && maxPage > 0) {
+        setCurrentPage(maxPage);
+      }
     }
   };
 
@@ -168,30 +205,61 @@ const Patients: React.FC = () => {
   };
 
   const generatePatientCode = () => {
-    const year = new Date().getFullYear();
-    const count = state.patients.length + 1;
-    return `P${year}${count.toString().padStart(4, '0')}`;
+    const { generatePatientCode: generateCode } = require('../utils/importExport');
+    return generateCode(state.patients);
   };
 
   const handleExportPDF = () => {
-    const reportTitle = filters.search || filters.diagnosis || filters.status || filters.year 
-      ? `Filtered Patient Records - ${new Date().toLocaleDateString()}`
-      : 'Complete Patient Records Report';
-    
-    generatePDFReport.patients(filteredPatients, reportTitle);
+    try {
+      const reportTitle = filters.search || filters.diagnosis || filters.status || filters.year 
+        ? `Filtered Patient Records - ${new Date().toLocaleDateString()}`
+        : 'Complete Patient Records Report';
+      
+      generatePDFReport.patients(filteredPatients, reportTitle);
+      showSuccess(t('patients.exportComplete') || 'Patient records exported successfully');
+      } catch (error) {
+      showError(t('patients.exportFailed') || 'Unable to generate PDF. Please try again.');
+    }
+  };
+
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil(filteredPatients.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredPatients.length);
+  const paginatedPatients = filteredPatients.slice(startIndex, endIndex);
+  
+  // Ensure currentPage doesn't exceed totalPages
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.search, filters.diagnosis, filters.status, filters.year, filters.month]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <div className="patients-page fade-in">
-      <div className="page-header">
+      <div className="page-header animate-fade-in-up">
         <div className="page-title-section">
-          <h1 className="page-title">Patient Records</h1>
-          <p className="page-subtitle">Manage and track patient information</p>
+          <h1 className="page-title">
+            {t('patients.title')}
+          </h1>
+          <p className="page-subtitle">
+            {t('patients.subtitle')}
+          </p>
         </div>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={handleAddNew}>
             <Plus className="btn-icon" />
-            Add Patient
+            {t('patients.addPatient')}
           </button>
         </div>
       </div>
@@ -204,7 +272,7 @@ const Patients: React.FC = () => {
               <Search className="search-icon" />
               <input
                 type="text"
-                placeholder="Search patients by name, code, or diagnosis..."
+                placeholder={t('patients.searchPlaceholder')}
                 value={filters.search}
                 onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 className="form-input"
@@ -218,7 +286,7 @@ const Patients: React.FC = () => {
               onChange={(e) => setFilters(prev => ({ ...prev, diagnosis: e.target.value }))}
               className="form-select"
             >
-              <option value="">All Diagnoses</option>
+              <option value="">{t('patients.allDiagnoses')}</option>
               {uniqueDiagnoses.map(diagnosis => (
                 <option key={diagnosis} value={diagnosis}>{diagnosis}</option>
               ))}
@@ -229,10 +297,10 @@ const Patients: React.FC = () => {
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
               className="form-select"
             >
-              <option value="">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Recovered">Recovered</option>
-              <option value="Inactive">Inactive</option>
+              <option value="">{t('patients.allStatus')}</option>
+              <option value="Diagnosed">{t('status.diagnosed')}</option>
+              <option value="Pre-op">{t('status.preOp')}</option>
+              <option value="Post-op">{t('status.postOp')}</option>
             </select>
 
             <select
@@ -240,7 +308,7 @@ const Patients: React.FC = () => {
               onChange={(e) => setFilters(prev => ({ ...prev, year: e.target.value }))}
               className="form-select"
             >
-              <option value="">All Years</option>
+              <option value="">{t('patients.allYears')}</option>
               {uniqueYears.map(year => (
                 <option key={year} value={year}>{year}</option>
               ))}
@@ -251,7 +319,7 @@ const Patients: React.FC = () => {
               onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
               className="form-select"
             >
-              <option value="">All Months</option>
+              <option value="">{t('patients.allMonths')}</option>
               {uniqueMonths.map(month => (
                 <option key={month} value={month}>{month}</option>
               ))}
@@ -265,12 +333,17 @@ const Patients: React.FC = () => {
         <div className="card-header">
           <h2 className="card-title">
             <Users className="card-title-icon" />
-            Patients ({filteredPatients.length})
+            {t('nav.patients')} ({filteredPatients.length})
+            {filteredPatients.length > itemsPerPage && (
+              <span style={{ fontSize: '0.875rem', fontWeight: 'normal', marginLeft: '0.5rem', color: 'var(--secondary-gray)' }}>
+                ({startIndex + 1}-{Math.min(endIndex, filteredPatients.length)} {t('common.of')} {filteredPatients.length})
+              </span>
+            )}
           </h2>
           <div className="table-actions">
             <button className="btn btn-sm btn-primary" onClick={handleExportPDF}>
               <Download className="btn-icon" />
-              Export PDF
+              {t('patients.exportPDF')}
             </button>
           </div>
         </div>
@@ -284,21 +357,21 @@ const Patients: React.FC = () => {
                     className="sort-btn"
                     onClick={() => handleSort('name')}
                   >
-                    Patient Code
+                    {t('patients.patientCode')}
                     {filters.sortBy === 'name' && (
                       filters.sortOrder === 'asc' ? <SortAsc /> : <SortDesc />
                     )}
                   </button>
                 </th>
-                <th>Full Name</th>
-                <th>Age / Gender</th>
-                <th>Diagnosis</th>
+                <th>{t('patients.fullName')}</th>
+                <th>{t('patients.age')} / {t('patients.gender')}</th>
+                <th>{t('patients.diagnosis')}</th>
                 <th>
                   <button 
                     className="sort-btn"
                     onClick={() => handleSort('date')}
                   >
-                    Admission Date
+                    {t('patients.visitedDate')}
                     {filters.sortBy === 'date' && (
                       filters.sortOrder === 'asc' ? <SortAsc /> : <SortDesc />
                     )}
@@ -309,44 +382,43 @@ const Patients: React.FC = () => {
                     className="sort-btn"
                     onClick={() => handleSort('status')}
                   >
-                    Status
+                    {t('patients.status')}
                     {filters.sortBy === 'status' && (
                       filters.sortOrder === 'asc' ? <SortAsc /> : <SortDesc />
                     )}
                   </button>
                 </th>
-                <th>Actions</th>
+                <th>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {filteredPatients.length === 0 ? (
+              {paginatedPatients.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="empty-table">
                     <div className="empty-state">
                       <Users className="empty-icon" />
-                      <p>No patients found matching your criteria.</p>
+                      <p>{t('patients.noPatients')}</p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredPatients.map((patient) => (
+                paginatedPatients.map((patient) => (
                   <tr key={patient.id}>
                     <td>
                       <div className="patient-code">{patient.code}</div>
                     </td>
-                    <td>
+                    <td onClick={() => navigate(`/patient/${patient.id}`)} style={{ cursor: 'pointer' }}>
                       <div 
                         className="patient-name" 
-                        style={{ cursor: 'pointer', color: 'var(--primary-teal)', textDecoration: 'underline' }}
-                        onClick={() => navigate(`/patient/${patient.id}`)}
-                        title="Click to view full details"
+                        style={{ cursor: 'pointer', color: 'var(--primary-teal)', textDecoration: 'underline', direction: 'rtl', textAlign: 'right' }}
+                        title={t('patients.clickToView')}
                       >
-                        {patient.fullName}
+                        {patient.fullNameArabic || 'No Name'}
                       </div>
                     </td>
                     <td>
                       <div className="patient-details">
-                        {patient.age} years • {patient.gender}
+                        {patient.age} {t('patients.yearsOld')} • {patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')}
                       </div>
                     </td>
                     <td>
@@ -354,12 +426,12 @@ const Patients: React.FC = () => {
                     </td>
                     <td>
                       <div className="patient-date">
-                        {new Date(patient.admissionDate).toLocaleDateString()}
+                        {new Date(patient.visitedDate || (patient as any).admissionDate).toLocaleDateString()}
                       </div>
                     </td>
                     <td>
-                      <span className={`status-badge status-${patient.status.toLowerCase()}`}>
-                        {patient.status}
+                      <span className={`status-badge status-${patient.status.toLowerCase().replace('-', '-')}`}>
+                        {patient.status === 'Diagnosed' ? t('status.diagnosed') : patient.status === 'Pre-op' ? t('status.preOp') : t('status.postOp')}
                       </span>
                     </td>
                     <td>
@@ -367,14 +439,14 @@ const Patients: React.FC = () => {
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleEdit(patient)}
-                          title="Edit Patient"
+                          title={t('patients.editPatient')}
                         >
                           <Edit className="btn-icon" />
                         </button>
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDelete(patient.id)}
-                          title="Delete Patient"
+                          title={t('common.delete')}
                         >
                           <Trash2 className="btn-icon" />
                         </button>
@@ -388,12 +460,73 @@ const Patients: React.FC = () => {
         </div>
       </div>
 
+      {/* Pagination */}
+      {filteredPatients.length > 0 && (
+        <div className="card">
+          <div className="pagination">
+            <button
+              className="pagination-btn"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="btn-icon" />
+              {t('common.previous')}
+            </button>
+            
+            <div className="pagination-info">
+              {t('common.page')} {currentPage} {t('common.of')} {totalPages}
+              <span style={{ margin: '0 0.5rem', color: 'var(--secondary-gray)' }}>•</span>
+              {filteredPatients.length} {t('common.total') || 'total'}
+            </div>
+
+            <select
+              className="pagination-select"
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+            >
+              <option value={10}>10 {t('common.perPage')}</option>
+              <option value={20}>20 {t('common.perPage')}</option>
+              <option value={50}>50 {t('common.perPage')}</option>
+              <option value={100}>100 {t('common.perPage')}</option>
+            </select>
+
+            <button
+              className="pagination-btn"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              {t('common.next')}
+              <ChevronRight className="btn-icon" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title={t('common.delete')}
+        message={t('common.confirmDelete')}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
+        onConfirm={confirmDelete}
+        onCancel={() => {
+          setShowDeleteConfirm(false);
+          setPatientToDelete(null);
+        }}
+        type="danger"
+      />
+
       {/* Patient Form Modal */}
       {showForm && (
         <PatientForm
           patient={editingPatient}
           onClose={handleFormClose}
           generateCode={generatePatientCode}
+          allPatients={state.patients}
         />
       )}
     </div>

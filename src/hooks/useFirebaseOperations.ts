@@ -2,9 +2,11 @@ import { useCallback } from 'react';
 import { usePatientContext } from '../context/PatientContext';
 import { FirebaseService } from '../services/firebaseService';
 import { Patient, User } from '../types';
+import { useToast } from '../components/Toast';
 
 export const useFirebaseOperations = () => {
   const { state, dispatch } = usePatientContext();
+  const { showError } = useToast();
 
   const addPatient = useCallback(async (patient: Omit<Patient, 'id'>) => {
     try {
@@ -15,7 +17,9 @@ export const useFirebaseOperations = () => {
       return patientId;
     } catch (error) {
       console.error('Error adding patient:', error);
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to add patient' });
+      const errorMessage = 'Failed to add patient';
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      showError(errorMessage);
       throw error;
     }
   }, [dispatch]);
@@ -28,7 +32,9 @@ export const useFirebaseOperations = () => {
       // The real-time listener will automatically update the state
     } catch (error) {
       console.error('Error updating patient:', error);
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to update patient' });
+      const errorMessage = 'Failed to update patient';
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      showError(errorMessage);
       throw error;
     }
   }, [dispatch]);
@@ -41,7 +47,9 @@ export const useFirebaseOperations = () => {
       // The real-time listener will automatically update the state
     } catch (error) {
       console.error('Error deleting patient:', error);
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to delete patient' });
+      const errorMessage = 'Failed to delete patient';
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      showError(errorMessage);
       throw error;
     }
   }, [dispatch]);
@@ -92,7 +100,8 @@ export const useFirebaseOperations = () => {
       const user = await FirebaseService.getUserByEmail(email);
       
       if (user && user.password === password) {
-        dispatch({ type: 'SET_CURRENT_USER', payload: user });
+        const { password, ...userWithoutPassword } = user;
+        dispatch({ type: 'SET_CURRENT_USER', payload: userWithoutPassword });
         return user;
       } else {
         throw new Error('Invalid credentials');

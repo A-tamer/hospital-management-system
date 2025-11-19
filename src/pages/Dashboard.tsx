@@ -12,16 +12,18 @@ import {
 import { usePatientContext } from '../context/PatientContext';
 import { DashboardStats } from '../types';
 import { generatePDFReport } from '../utils/pdfGenerator';
+import { useLanguage } from '../context/LanguageContext';
 
 const Dashboard: React.FC = () => {
   const { state } = usePatientContext();
+  const { t } = useLanguage();
 
   const stats: DashboardStats = useMemo(() => {
     const patients = state.patients;
     const totalPatients = patients.length;
-    const activePatients = patients.filter(p => p.status === 'Active').length;
-    const recoveredPatients = patients.filter(p => p.status === 'Recovered').length;
-    const inactivePatients = patients.filter(p => p.status === 'Inactive').length;
+    const diagnosedPatients = patients.filter(p => p.status === 'Diagnosed').length;
+    const preOpPatients = patients.filter(p => p.status === 'Pre-op').length;
+    const postOpPatients = patients.filter(p => p.status === 'Post-op').length;
 
     // Group by diagnosis
     const patientsByDiagnosis = patients.reduce((acc, patient) => {
@@ -29,44 +31,47 @@ const Dashboard: React.FC = () => {
       return acc;
     }, {} as { [key: string]: number });
 
-    // Group by month
-    const monthlyAdmissions = patients.reduce((acc, patient) => {
-      const month = new Date(patient.admissionDate).toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short' 
-      });
-      acc[month] = (acc[month] || 0) + 1;
+    // Group by month (using visitedDate)
+    const monthlyVisits = patients.reduce((acc, patient) => {
+      const dateField = patient.visitedDate || (patient as any).admissionDate;
+      if (dateField) {
+        const month = new Date(dateField).toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'short' 
+        });
+        acc[month] = (acc[month] || 0) + 1;
+      }
       return acc;
     }, {} as { [key: string]: number });
 
     return {
       totalPatients,
-      activePatients,
-      recoveredPatients,
-      inactivePatients,
+      diagnosedPatients,
+      preOpPatients,
+      postOpPatients,
       patientsByDiagnosis,
-      monthlyAdmissions,
+      monthlyVisits,
     };
   }, [state.patients]);
 
   const quickActions = [
     {
-      title: 'View All Patients',
-      description: 'Browse and manage patient records',
+      title: t('dashboard.viewAllPatients'),
+      description: t('dashboard.viewAllPatientsDesc'),
       icon: Users,
       link: '/patients',
       color: 'var(--primary-teal)',
     },
     {
-      title: 'View Statistics',
-      description: 'Analyze patient data and trends',
+      title: t('dashboard.viewStatistics'),
+      description: t('dashboard.viewStatisticsDesc'),
       icon: TrendingUp,
       link: '/statistics',
       color: 'var(--primary-purple)',
     },
     {
-      title: 'Admin Panel',
-      description: 'Manage users and system settings',
+      title: t('dashboard.adminPanel'),
+      description: t('dashboard.adminPanelDesc'),
       icon: FileText,
       link: '/admin',
       color: 'var(--primary-sky)',
@@ -82,18 +87,18 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="dashboard fade-in">
+    <div className="dashboard fade-in" style={{ padding: '2rem' }}>
       <div className="dashboard-header">
         <div className="dashboard-title-section">
-          <h1 className="dashboard-title">Hospital Dashboard</h1>
+          <h1 className="dashboard-title">{t('dashboard.title')}</h1>
           <p className="dashboard-subtitle">
-            Welcome to the Hospital Management System. Monitor key metrics and manage patient records.
+            {t('dashboard.subtitle')}
           </p>
         </div>
         <div className="dashboard-actions">
           <button className="btn btn-primary" onClick={handleExportDashboardPDF}>
             <Download className="btn-icon" />
-            Export Dashboard PDF
+            {t('dashboard.exportPDF')}
           </button>
         </div>
       </div>
@@ -106,7 +111,7 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="stats-content">
             <div className="stats-number">{stats.totalPatients}</div>
-            <div className="stats-label">Total Patients</div>
+            <div className="stats-label">{t('dashboard.totalPatients')}</div>
           </div>
         </div>
 
@@ -115,8 +120,8 @@ const Dashboard: React.FC = () => {
             <Activity className="icon" style={{ color: 'var(--success)' }} />
           </div>
           <div className="stats-content">
-            <div className="stats-number">{stats.activePatients}</div>
-            <div className="stats-label">Active Cases</div>
+            <div className="stats-number">{stats.diagnosedPatients}</div>
+            <div className="stats-label">{t('dashboard.diagnosed')}</div>
           </div>
         </div>
 
@@ -125,8 +130,8 @@ const Dashboard: React.FC = () => {
             <CheckCircle className="icon" style={{ color: 'var(--primary-blue)' }} />
           </div>
           <div className="stats-content">
-            <div className="stats-number">{stats.recoveredPatients}</div>
-            <div className="stats-label">Recovered</div>
+            <div className="stats-number">{stats.preOpPatients}</div>
+            <div className="stats-label">{t('dashboard.preOp')}</div>
           </div>
         </div>
 
@@ -135,8 +140,8 @@ const Dashboard: React.FC = () => {
             <AlertCircle className="icon" style={{ color: 'var(--warning)' }} />
           </div>
           <div className="stats-content">
-            <div className="stats-number">{stats.inactivePatients}</div>
-            <div className="stats-label">Inactive</div>
+            <div className="stats-number">{stats.postOpPatients}</div>
+            <div className="stats-label">{t('dashboard.postOp')}</div>
           </div>
         </div>
       </div>
@@ -145,7 +150,7 @@ const Dashboard: React.FC = () => {
         {/* Quick Actions */}
         <div className="card">
           <div className="card-header">
-            <h2 className="card-title">Quick Actions</h2>
+            <h2 className="card-title">{t('dashboard.quickActions')}</h2>
           </div>
           <div className="quick-actions">
             {quickActions.map((action, index) => (
@@ -170,29 +175,29 @@ const Dashboard: React.FC = () => {
         {/* Recent Patients */}
         <div className="card">
           <div className="card-header">
-            <h2 className="card-title">Recent Patients</h2>
+            <h2 className="card-title">{t('dashboard.recentPatients')}</h2>
             <Link to="/patients" className="btn btn-sm btn-secondary">
-              View All
+              {t('common.viewAll')}
             </Link>
           </div>
           <div className="recent-patients">
             {recentPatients.length === 0 ? (
               <div className="empty-state">
                 <Users className="empty-icon" />
-                <p>No patients found. Add your first patient to get started.</p>
+                <p>{t('common.noData')}</p>
               </div>
             ) : (
               recentPatients.map((patient) => (
                 <div key={patient.id} className="recent-patient-item">
                   <div className="patient-info">
-                    <h4 className="patient-name">{patient.fullName}</h4>
+                    <h4 className="patient-name" style={{ direction: 'rtl', textAlign: 'right' }}>{patient.fullNameArabic || 'No Name'}</h4>
                     <p className="patient-details">
-                      {patient.diagnosis} • {patient.age} years old
+                      {patient.diagnosis} • {patient.age} {t('patients.yearsOld')}
                     </p>
                   </div>
                   <div className="patient-status">
                     <span className={`status-badge status-${patient.status.toLowerCase()}`}>
-                      {patient.status}
+                      {patient.status === 'Diagnosed' ? t('status.diagnosed') : patient.status === 'Pre-op' ? t('status.preOp') : t('status.postOp')}
                     </span>
                   </div>
                 </div>
@@ -206,7 +211,7 @@ const Dashboard: React.FC = () => {
       {Object.keys(stats.patientsByDiagnosis).length > 0 && (
         <div className="card">
           <div className="card-header">
-            <h2 className="card-title">Diagnosis Distribution</h2>
+            <h2 className="card-title">{t('dashboard.diagnosisDistribution')}</h2>
           </div>
           <div className="diagnosis-grid">
             {Object.entries(stats.patientsByDiagnosis).map(([diagnosis, count]) => (

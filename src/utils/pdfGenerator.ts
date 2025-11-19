@@ -56,14 +56,14 @@ export class PDFReportGenerator {
     this.doc.setFontSize(10);
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFillColor(20, 184, 166);
-    this.doc.rect(margin, currentY - 5, tableWidth, 10, 'F');
+    this.doc.rect(margin, currentY - 5, tableWidth, 12, 'F');
     
     this.doc.setTextColor(255, 255, 255);
     headers.forEach((header, index) => {
       this.doc.text(header, margin + (index * colWidth) + 2, currentY);
     });
     
-    currentY += 10;
+    currentY += 12; // Increased spacing
     
     // Add data rows
     this.doc.setFont('helvetica', 'normal');
@@ -78,7 +78,7 @@ export class PDFReportGenerator {
       // Alternate row colors
       if (rowIndex % 2 === 0) {
         this.doc.setFillColor(248, 250, 252);
-        this.doc.rect(margin, currentY - 5, tableWidth, 10, 'F');
+        this.doc.rect(margin, currentY - 5, tableWidth, 12, 'F');
       }
       
       row.forEach((cell, colIndex) => {
@@ -86,7 +86,7 @@ export class PDFReportGenerator {
         this.doc.text(cellText, margin + (colIndex * colWidth) + 2, currentY);
       });
       
-      currentY += 10;
+      currentY += 12; // Increased spacing from 10 to 12
     });
     
     return currentY;
@@ -98,17 +98,17 @@ export class PDFReportGenerator {
     // Prepare table data
     const tableData = patients.map(patient => [
       patient.code,
-      patient.fullName,
+      patient.fullNameArabic || 'No Name',
       `${patient.age} years`,
       patient.gender,
       patient.diagnosis,
-      new Date(patient.admissionDate).toLocaleDateString(),
-      patient.dischargeDate ? new Date(patient.dischargeDate).toLocaleDateString() : 'N/A',
+      new Date(patient.visitedDate || (patient as any).admissionDate).toLocaleDateString(),
+      'N/A', // Discharge date removed
       patient.status,
       patient.notes || 'N/A'
     ]);
 
-    const headers = ['Code', 'Name', 'Age', 'Gender', 'Diagnosis', 'Admission', 'Discharge', 'Status', 'Notes'];
+    const headers = ['Code', 'Name (Arabic)', 'Age', 'Gender', 'Diagnosis', 'Admission', 'Discharge', 'Status', 'Notes'];
     this.addTable(tableData, headers);
     
     // Add footer
@@ -130,9 +130,9 @@ export class PDFReportGenerator {
     
     const summaryData = [
       ['Total Patients', stats.totalPatients.toString()],
-      ['Active Patients', stats.activePatients.toString()],
-      ['Recovered Patients', stats.recoveredPatients.toString()],
-      ['Inactive Patients', stats.inactivePatients.toString()],
+      ['Diagnosed Patients', stats.diagnosedPatients.toString()],
+      ['Pre-op Patients', stats.preOpPatients.toString()],
+      ['Post-op Patients', stats.postOpPatients.toString()],
     ];
     
     currentY = this.addTable(summaryData, ['Metric', 'Count'], currentY) + 20;
@@ -157,7 +157,7 @@ export class PDFReportGenerator {
     this.doc.text('Monthly Admissions', 20, currentY);
     currentY += 20;
     
-    const monthlyData = Object.entries(stats.monthlyAdmissions).map(([month, count]) => [
+    const monthlyData = Object.entries(stats.monthlyVisits).map(([month, count]) => [
       month,
       count.toString()
     ]);
@@ -183,8 +183,8 @@ export class PDFReportGenerator {
     
     const kpiData = [
       ['Total Patients', stats.totalPatients.toString()],
-      ['Active Cases', stats.activePatients.toString()],
-      ['Recovery Rate', `${Math.round((stats.recoveredPatients / stats.totalPatients) * 100)}%`],
+      ['Diagnosed Cases', stats.diagnosedPatients.toString()],
+      ['Pre-op Rate', `${Math.round((stats.preOpPatients / stats.totalPatients) * 100)}%`],
       ['Average Age', this.calculateAverageAge(patients).toString()],
     ];
     
@@ -202,9 +202,9 @@ export class PDFReportGenerator {
     
     const recentData = recentPatients.map(patient => [
       patient.code,
-      patient.fullName,
+      patient.fullNameArabic || 'No Name',
       patient.diagnosis,
-      new Date(patient.admissionDate).toLocaleDateString(),
+      new Date(patient.visitedDate || (patient as any).admissionDate).toLocaleDateString(),
       patient.status
     ]);
     
