@@ -16,12 +16,14 @@ import { usePatientContext } from '../context/PatientContext';
 import { Patient, FilterOptions } from '../types';
 import PatientForm from '../components/PatientForm';
 import { generatePDFReport } from '../utils/pdfGenerator';
+import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
 const Patients: React.FC = () => {
   const { state, dispatch } = usePatientContext();
+  const { deletePatient } = useFirebaseOperations();
   const { t } = useLanguage();
   const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
@@ -166,17 +168,28 @@ const Patients: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (patientToDelete) {
-      dispatch({ type: 'DELETE_PATIENT', payload: patientToDelete });
-      showSuccess(t('patients.patientDeleted') || 'Patient record removed successfully');
-      setShowDeleteConfirm(false);
-      setPatientToDelete(null);
-      // Reset to first page if current page becomes empty
-      const remainingPatients = filteredPatients.filter(p => p.id !== patientToDelete);
-      const maxPage = Math.ceil(remainingPatients.length / itemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
+      try {
+        // Delete from Firestore
+        await deletePatient(patientToDelete);
+
+        // Optimistically update local state
+        dispatch({ type: 'DELETE_PATIENT', payload: patientToDelete });
+        showSuccess(t('patients.patientDeleted') || 'Patient record removed successfully');
+
+        // Reset to first page if current page becomes empty
+        const remainingPatients = filteredPatients.filter(p => p.id !== patientToDelete);
+        const maxPage = Math.ceil(remainingPatients.length / itemsPerPage);
+        if (currentPage > maxPage && maxPage > 0) {
+          setCurrentPage(maxPage);
+        }
+      } catch (error) {
+        console.error('Failed to delete patient from database:', error);
+        showError(t('patients.deleteFailed') || 'Failed to delete patient. Please try again.');
+      } finally {
+        setShowDeleteConfirm(false);
+        setPatientToDelete(null);
       }
     }
   };
@@ -410,7 +423,7 @@ const Patients: React.FC = () => {
                     <td onClick={() => navigate(`/patient/${patient.id}`)} style={{ cursor: 'pointer' }}>
                       <div 
                         className="patient-name" 
-                        style={{ cursor: 'pointer', color: 'var(--primary-teal)', textDecoration: 'underline', direction: 'rtl', textAlign: 'right' }}
+                        style={{ cursor: 'pointer', color: 'var(--primary-blue)', textDecoration: 'underline', direction: 'rtl', textAlign: 'right' }}
                         title={t('patients.clickToView')}
                       >
                         {patient.fullNameArabic || 'No Name'}
@@ -443,13 +456,15 @@ const Patients: React.FC = () => {
                         >
                           <Edit className="btn-icon" />
                         </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDelete(patient.id)}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="btn-icon" />
-                        </button>
+                        {state.currentUser?.role === 'admin' && (
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => handleDelete(patient.id)}
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="btn-icon" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

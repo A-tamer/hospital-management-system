@@ -1,8 +1,10 @@
 // Session Management Utility
-// Manages user login sessions with expiration
+// Manages user login sessions with expiration + companion JWT token
+
+import { createJwtToken, saveJwtToken, clearJwtToken } from './jwt';
 
 const SESSION_KEY = 'hospital_session';
-const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const SESSION_DURATION = 24 * 60 * 60 * 1000; // 1 day in milliseconds
 
 export interface SessionData {
   user: any;
@@ -14,12 +16,24 @@ export interface SessionData {
  * Save user session to localStorage
  */
 export function saveSession(user: any): void {
+  // Create a simple front-end JWT token (unsigned, for client-side auth only)
+  const token = createJwtToken(
+    {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+    },
+    SESSION_DURATION
+  );
+
   const sessionData: SessionData = {
     user,
     expiresAt: Date.now() + SESSION_DURATION,
     createdAt: Date.now(),
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+  saveJwtToken(token);
 }
 
 /**
@@ -60,6 +74,7 @@ export function isSessionValid(): boolean {
 export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('currentUser');
+  clearJwtToken();
 }
 
 /**

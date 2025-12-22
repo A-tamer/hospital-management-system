@@ -178,6 +178,10 @@ const translations: Record<Language, Record<string, string>> = {
     'detail.surgery': 'Surgery',
     'detail.viewRadiology': 'View Radiology',
     'detail.viewLabFile': 'View Lab File',
+    'detail.exportPDF': 'Export Patient PDF',
+    'detail.exportingPDF': 'Generating PDF...',
+    'detail.pdfExported': 'Patient PDF exported successfully',
+    'detail.pdfError': 'Failed to generate PDF. Please try again.',
     
     // Statistics
     'stats.title': 'Statistics & Analytics',
@@ -426,6 +430,10 @@ const translations: Record<Language, Record<string, string>> = {
     'detail.surgery': 'جراحة',
     'detail.viewRadiology': 'عرض الأشعة',
     'detail.viewLabFile': 'عرض ملف المختبر',
+    'detail.exportPDF': 'تصدير ملف PDF للمريض',
+    'detail.exportingPDF': 'جاري إنشاء ملف PDF...',
+    'detail.pdfExported': 'تم تصدير ملف PDF للمريض بنجاح',
+    'detail.pdfError': 'فشل إنشاء ملف PDF. يرجى المحاولة مرة أخرى.',
     
     // Statistics
     'stats.title': 'الإحصائيات والتحليلات',

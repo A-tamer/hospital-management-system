@@ -60,21 +60,21 @@ const Dashboard: React.FC = () => {
       description: t('dashboard.viewAllPatientsDesc'),
       icon: Users,
       link: '/patients',
-      color: 'var(--primary-teal)',
+      color: 'var(--primary-blue)',
     },
     {
       title: t('dashboard.viewStatistics'),
       description: t('dashboard.viewStatisticsDesc'),
       icon: TrendingUp,
       link: '/statistics',
-      color: 'var(--primary-purple)',
+      color: 'var(--info)',
     },
     {
       title: t('dashboard.adminPanel'),
       description: t('dashboard.adminPanelDesc'),
       icon: FileText,
       link: '/admin',
-      color: 'var(--primary-sky)',
+      color: 'var(--secondary-blue)',
     },
   ];
 
@@ -107,7 +107,7 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-4">
         <div className="card stats-card">
           <div className="stats-icon">
-            <Users className="icon" style={{ color: 'var(--primary-teal)' }} />
+            <Users className="icon" style={{ color: 'var(--primary-blue)' }} />
           </div>
           <div className="stats-content">
             <div className="stats-number">{stats.totalPatients}</div>

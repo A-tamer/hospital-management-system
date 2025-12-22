@@ -93,7 +93,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return 'var(--warning)';
       case 'info':
       default:
-        return 'var(--primary-teal)';
+        return 'var(--primary-blue)';
     }
   };
 

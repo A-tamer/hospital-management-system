@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { Patient, User, SafeUser, FilterOptions } from '../types';
 import { FirebaseService } from '../services/firebaseService';
-import { initializeDummyData } from '../utils/initializeData';
 import { getSession, clearSession, extendSession, saveSession } from '../utils/sessionManager';
 
 interface PatientState {
@@ -92,10 +91,7 @@ export const PatientProvider: React.FC<{ children: React.ReactNode }> = ({ child
       try {
         dispatch({ type: 'SET_LOADING', payload: true });
         dispatch({ type: 'SET_ERROR', payload: null });
-
-        // Initialize dummy data if database is empty
-        await initializeDummyData();
-
+      
         // Set up real-time listeners
         const unsubscribePatients = FirebaseService.subscribeToPatients((patients) => {
           dispatch({ type: 'SET_PATIENTS', payload: patients });

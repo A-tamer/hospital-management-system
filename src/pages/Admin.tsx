@@ -256,7 +256,7 @@ const Admin: React.FC = () => {
       <div className="grid grid-3" style={{ marginBottom: '2rem' }}>
         <div className="card stats-card">
           <div className="stats-icon">
-            <Users className="icon" style={{ color: 'var(--primary-teal)' }} />
+            <Users className="icon" style={{ color: 'var(--primary-blue)' }} />
           </div>
           <div className="stats-content">
             <div className="stats-number">{state.users.length}</div>
@@ -266,7 +266,7 @@ const Admin: React.FC = () => {
 
         <div className="card stats-card">
           <div className="stats-icon">
-            <Shield className="icon" style={{ color: 'var(--primary-purple)' }} />
+            <Shield className="icon" style={{ color: 'var(--info)' }} />
           </div>
           <div className="stats-content">
             <div className="stats-number">

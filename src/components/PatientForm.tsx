@@ -8,6 +8,7 @@ import { DIAGNOSIS_CATEGORIES } from '../utils/diagnosisData';
 import CollapsibleSection from './CollapsibleSection';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from './Toast';
+import { validateImageFile, validatePdfFile, validateFileForFolder, formatFileSize } from '../utils/fileValidation';
 
 interface PatientFormProps {
   patient?: Patient | null;
@@ -51,6 +52,7 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
   const [surgeryImageFile, setSurgeryImageFile] = useState<File | null>(null);
   const [radiologyFiles, setRadiologyFiles] = useState<File[]>([]);
   const [labFiles, setLabFiles] = useState<File[]>([]);
+  const [activeUploadTarget, setActiveUploadTarget] = useState<'personal' | 'surgery' | 'radiology' | 'lab' | null>(null);
 
   // Multiple Surgeries (each with its own surgeons)
   const [surgeries, setSurgeries] = useState<SurgeryRecord[]>([]);
@@ -61,6 +63,7 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
 
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [fileErrors, setFileErrors] = useState<{ [key: string]: string }>({});
 
   // Initialize form data
   useEffect(() => {
@@ -162,6 +165,167 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
     }));
     setFollowUps(renumbered);
   };
+
+  // Shared file processing helpers (used by input change + paste handlers)
+  const processPersonalImageFile = (file: File | null) => {
+    if (!file) {
+      setPersonalImageFile(null);
+      setFileErrors({ ...fileErrors, personalImage: '' });
+      return;
+    }
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setFileErrors({ ...fileErrors, personalImage: validation.error || '' });
+      showError(validation.error || 'Invalid image file');
+      return;
+    }
+
+    setPersonalImageFile(file);
+    setFileErrors({ ...fileErrors, personalImage: '' });
+  };
+
+  const processSurgeryImageFile = (file: File | null) => {
+    if (!file) {
+      setSurgeryImageFile(null);
+      setFileErrors({ ...fileErrors, surgeryImage: '' });
+      return;
+    }
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setFileErrors({ ...fileErrors, surgeryImage: validation.error || '' });
+      showError(validation.error || 'Invalid image file');
+      return;
+    }
+
+    setSurgeryImageFile(file);
+    setFileErrors({ ...fileErrors, surgeryImage: '' });
+  };
+
+  const processRadiologyFiles = (selectedFiles: File[]) => {
+    if (selectedFiles.length === 0) {
+      setRadiologyFiles([]);
+      setFileErrors({ ...fileErrors, radiology: '' });
+      return;
+    }
+
+    const invalidFiles: string[] = [];
+    const validFiles: File[] = [];
+
+    selectedFiles.forEach((file) => {
+      const validation = validateFileForFolder(file, 'radiology');
+      if (!validation.valid) {
+        invalidFiles.push(`${file.name}: ${validation.error}`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (invalidFiles.length > 0) {
+      setFileErrors({ ...fileErrors, radiology: invalidFiles.join('; ') });
+      showError(`Some radiology files are invalid: ${invalidFiles.join('; ')}`);
+      return;
+    }
+
+    setRadiologyFiles(validFiles);
+    setFileErrors({ ...fileErrors, radiology: '' });
+  };
+
+  const processLabFiles = (selectedFiles: File[]) => {
+    if (selectedFiles.length === 0) {
+      setLabFiles([]);
+      setFileErrors({ ...fileErrors, lab: '' });
+      return;
+    }
+
+    const invalidFiles: string[] = [];
+    const validFiles: File[] = [];
+
+    selectedFiles.forEach((file) => {
+      const validation = validateFileForFolder(file, 'lab');
+      if (!validation.valid) {
+        invalidFiles.push(`${file.name}: ${validation.error}`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (invalidFiles.length > 0) {
+      setFileErrors({ ...fileErrors, lab: invalidFiles.join('; ') });
+      showError(`Some lab files are invalid: ${invalidFiles.join('; ')}`);
+      return;
+    }
+
+    setLabFiles(validFiles);
+    setFileErrors({ ...fileErrors, lab: '' });
+  };
+
+  // File validation handlers (for input change)
+  const handlePersonalImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    processPersonalImageFile(file);
+    // Clear native input value so the same file can be re-selected if needed
+    if (e.target) e.target.value = '';
+  };
+
+  const handleSurgeryImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    processSurgeryImageFile(file);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleRadiologyFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    processRadiologyFiles(selectedFiles);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleLabFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    processLabFiles(selectedFiles);
+    if (e.target) e.target.value = '';
+  };
+
+  // Global paste handler – allows Ctrl+V to upload files
+  useEffect(() => {
+    const handlePaste = (event: Event) => {
+      const clipboardData = (event as any).clipboardData as DataTransfer | null;
+      if (!clipboardData) return;
+
+      const items = Array.from(clipboardData.items || []);
+      const files: File[] = [];
+
+      items.forEach((item) => {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      });
+
+      if (files.length === 0) return;
+
+      // We handle file pastes ourselves
+      event.preventDefault();
+
+      const target = activeUploadTarget || 'personal';
+
+      if (target === 'personal') {
+        processPersonalImageFile(files[0]);
+      } else if (target === 'surgery') {
+        processSurgeryImageFile(files[0]);
+      } else if (target === 'radiology') {
+        processRadiologyFiles(files);
+      } else if (target === 'lab') {
+        processLabFiles(files);
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [activeUploadTarget, processPersonalImageFile, processSurgeryImageFile, processRadiologyFiles, processLabFiles]);
 
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
@@ -287,7 +451,7 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
           {/* Basic Information - Collapsible */}
           <CollapsibleSection 
             title={t('form.basicInfo')} 
-            icon={<User style={{ width: '20px', height: '20px', color: '#007bff' }} />}
+            icon={<User style={{ width: '20px', height: '20px', color: '#17a2b8' }} />}
             defaultOpen={true}
           >
             <div className="form-row">
@@ -487,87 +651,153 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
           </CollapsibleSection>
 
           {/* Files - Multiple Collapsible Sections */}
-          <CollapsibleSection 
-            title={t('form.personalImage')} 
-            icon={<ImageIcon style={{ width: '20px', height: '20px', color: '#17a2b8' }} />}
-          >
-            <div className="form-group">
-              <label className="form-label">{t('form.uploadPersonalPhoto')}</label>
-              {files.personalImage && (
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <img src={files.personalImage} alt="Personal" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />
-                </div>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setPersonalImageFile(e.target.files?.[0] || null)}
-                className="form-input"
-              />
-            </div>
-          </CollapsibleSection>
+          <div onClick={() => setActiveUploadTarget('personal')}>
+            <CollapsibleSection 
+              title={t('form.personalImage')} 
+              icon={<ImageIcon style={{ width: '20px', height: '20px', color: '#17a2b8' }} />}
+            >
+              <div className="form-group">
+                <label className="form-label">{t('form.uploadPersonalPhoto')}</label>
+                {files.personalImage && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <img
+                      src={files.personalImage}
+                      alt="Personal"
+                      style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}
+                    />
+                  </div>
+                )}
+                <label className="file-upload-button">
+                  <span className="file-upload-label">
+                    <ImageIcon style={{ width: '18px', height: '18px' }} />
+                    <span>{t('form.chooseFile') || 'Choose image'}</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    onChange={handlePersonalImageChange}
+                  />
+                </label>
+                {fileErrors.personalImage && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#dc3545' }}>
+                    {fileErrors.personalImage}
+                  </div>
+                )}
+                {personalImageFile && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745' }}>
+                    Selected: {personalImageFile.name} ({formatFileSize(personalImageFile.size)})
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
+          </div>
 
-          <CollapsibleSection 
-            title={t('form.surgeryImage')} 
-            icon={<Stethoscope style={{ width: '20px', height: '20px', color: '#e83e8c' }} />}
-          >
-            <div className="form-group">
-              <label className="form-label">{t('form.uploadSurgeryImage')}</label>
-              {files.surgeryImage && (
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <img src={files.surgeryImage} alt="Surgery" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />
-                </div>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setSurgeryImageFile(e.target.files?.[0] || null)}
-                className="form-input"
-              />
-            </div>
-          </CollapsibleSection>
+          <div onClick={() => setActiveUploadTarget('surgery')}>
+            <CollapsibleSection 
+              title={t('form.surgeryImage')} 
+              icon={<Stethoscope style={{ width: '20px', height: '20px', color: '#e83e8c' }} />}
+            >
+              <div className="form-group">
+                <label className="form-label">{t('form.uploadSurgeryImage')}</label>
+                {files.surgeryImage && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <img
+                      src={files.surgeryImage}
+                      alt="Surgery"
+                      style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}
+                    />
+                  </div>
+                )}
+                <label className="file-upload-button file-upload-button-secondary">
+                  <span className="file-upload-label">
+                    <Stethoscope style={{ width: '18px', height: '18px' }} />
+                    <span>{t('form.chooseFile') || 'Choose image'}</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    onChange={handleSurgeryImageChange}
+                  />
+                </label>
+                {fileErrors.surgeryImage && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#dc3545' }}>
+                    {fileErrors.surgeryImage}
+                  </div>
+                )}
+                {surgeryImageFile && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745' }}>
+                    Selected: {surgeryImageFile.name} ({formatFileSize(surgeryImageFile.size)})
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
+          </div>
 
-          <CollapsibleSection 
-            title={t('form.radiologyFiles')} 
-            icon={<FileText style={{ width: '20px', height: '20px', color: '#ffc107' }} />}
-          >
-            <div className="form-group">
-              <label className="form-label">{t('form.uploadRadiology')}</label>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                multiple
-                onChange={(e) => setRadiologyFiles(Array.from(e.target.files || []))}
-                className="form-input"
-              />
-              {radiologyFiles.length > 0 && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
-                  {radiologyFiles.length} {t('form.filesSelected')}
-                </div>
-              )}
-            </div>
-          </CollapsibleSection>
+          <div onClick={() => setActiveUploadTarget('radiology')}>
+            <CollapsibleSection 
+              title={t('form.radiologyFiles')} 
+              icon={<FileText style={{ width: '20px', height: '20px', color: '#ffc107' }} />}
+            >
+              <div className="form-group">
+                <label className="form-label">{t('form.uploadRadiology')}</label>
+                <label className="file-upload-button file-upload-button-warning">
+                  <span className="file-upload-label">
+                    <FileText style={{ width: '18px', height: '18px' }} />
+                    <span>{t('form.chooseFiles') || 'Choose files'}</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                    multiple
+                    onChange={handleRadiologyFilesChange}
+                  />
+                </label>
+                {fileErrors.radiology && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#dc3545' }}>
+                    {fileErrors.radiology}
+                  </div>
+                )}
+                {radiologyFiles.length > 0 && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745' }}>
+                    {radiologyFiles.length} {t('form.filesSelected')} ({radiologyFiles.reduce((sum, f) => sum + f.size, 0) > 0 ? formatFileSize(radiologyFiles.reduce((sum, f) => sum + f.size, 0)) : ''})
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
+          </div>
 
-          <CollapsibleSection 
-            title={t('form.labFiles')} 
-            icon={<FileText style={{ width: '20px', height: '20px', color: '#28a745' }} />}
-          >
-            <div className="form-group">
-              <label className="form-label">{t('form.uploadLab')}</label>
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,image/*"
-                multiple
-                onChange={(e) => setLabFiles(Array.from(e.target.files || []))}
-                className="form-input"
-              />
-              {labFiles.length > 0 && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
-                  {labFiles.length} {t('form.filesSelected')}
-                </div>
-              )}
-            </div>
-          </CollapsibleSection>
+          <div onClick={() => setActiveUploadTarget('lab')}>
+            <CollapsibleSection 
+              title={t('form.labFiles')} 
+              icon={<FileText style={{ width: '20px', height: '20px', color: '#28a745' }} />}
+            >
+              <div className="form-group">
+                <label className="form-label">{t('form.uploadLab')}</label>
+                <label className="file-upload-button file-upload-button-success">
+                  <span className="file-upload-label">
+                    <FileText style={{ width: '18px', height: '18px' }} />
+                    <span>{t('form.chooseFiles') || 'Choose files'}</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                    multiple
+                    onChange={handleLabFilesChange}
+                  />
+                </label>
+                {fileErrors.lab && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#dc3545' }}>
+                    {fileErrors.lab}
+                  </div>
+                )}
+                {labFiles.length > 0 && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#28a745' }}>
+                    {labFiles.length} {t('form.filesSelected')} ({labFiles.reduce((sum, f) => sum + f.size, 0) > 0 ? formatFileSize(labFiles.reduce((sum, f) => sum + f.size, 0)) : ''})
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
+          </div>
 
           {/* Surgeries - Collapsible */}
           <CollapsibleSection 
@@ -700,7 +930,7 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
             ))}
             <button type="button" onClick={addSurgery} className="btn btn-secondary btn-sm">
               <Plus style={{ width: '16px', height: '16px' }} />
-              {t('form.addSurgery')}
+              {t('form.addSurgery') || 'Add surgery record'}
             </button>
           </CollapsibleSection>
 
@@ -742,7 +972,7 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
             ))}
             <button type="button" onClick={addFollowUp} className="btn btn-secondary btn-sm">
               <Plus style={{ width: '16px', height: '16px' }} />
-              {t('form.addFollowUp')}
+              {t('form.addFollowUp') || 'Add follow-up visit'}
             </button>
           </CollapsibleSection>
 
@@ -759,8 +989,17 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
               {t('common.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={isLoading || uploading}>
-              <Save style={{ width: '16px', height: '16px' }} />
-              {uploading ? t('form.uploading') : isLoading ? t('form.saving') : (patient ? t('form.updatePatient') : t('form.addPatient'))}
+              {uploading ? (
+                <>
+                  <span className="btn-spinner" />
+                  <span>{t('form.uploading') || 'Uploading files...'}</span>
+                </>
+              ) : (
+                <>
+                  <Save style={{ width: '16px', height: '16px' }} />
+                  <span>{isLoading ? (t('form.saving') || 'Saving...') : (patient ? t('form.updatePatient') : t('form.addPatient'))}</span>
+                </>
+              )}
             </button>
           </div>
         </form>

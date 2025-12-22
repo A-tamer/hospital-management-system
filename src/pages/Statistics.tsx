@@ -312,7 +312,7 @@ const Statistics: React.FC = () => {
       <div className="grid grid-4">
         <div className="card stats-card">
           <div className="stats-icon">
-            <Users className="icon" style={{ color: 'var(--primary-teal)' }} />
+            <Users className="icon" style={{ color: 'var(--primary-blue)' }} />
           </div>
           <div className="stats-content">
             <div className="stats-number">{state.patients.length}</div>
@@ -346,7 +346,7 @@ const Statistics: React.FC = () => {
 
         <div className="card stats-card">
           <div className="stats-icon">
-            <Calendar className="icon" style={{ color: 'var(--primary-purple)' }} />
+            <Calendar className="icon" style={{ color: 'var(--info)' }} />
           </div>
           <div className="stats-content">
             <div className="stats-number">

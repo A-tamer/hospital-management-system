@@ -7,6 +7,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
 import { verifyPassword, verifyPasswordWithSalt } from '../utils/passwordHash';
 import { saveSession } from '../utils/sessionManager';
+import { getJwtToken } from '../utils/jwt';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -66,8 +67,10 @@ const Login: React.FC = () => {
         const { password, ...userWithoutPassword } = user;
         dispatch({ type: 'SET_CURRENT_USER', payload: userWithoutPassword });
         localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
-        // Save session with expiration
+        // Save session with expiration + store JWT token
         saveSession(userWithoutPassword);
+        const token = getJwtToken();
+        console.debug('JWT token created for user', userWithoutPassword.email, token ? '✅' : '⚠️ no token');
         setLoginForm({ email: '', password: '' });
         showSuccess(t('login.welcomeBack') || `Welcome back, ${userWithoutPassword.name}!`, undefined, true);
         navigate('/');

@@ -14,6 +14,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { Patient, User } from '../types';
+import { validateFileForFolder } from '../utils/fileValidation';
 
 export const FirebaseService = {
   // 🧠 --- PATIENT FUNCTIONS ---
@@ -62,6 +63,12 @@ export const FirebaseService = {
   // 📦 --- FILE UPLOADS ---
   async uploadPatientFile(patientCode: string, file: File, folder: string = 'attachments'): Promise<string> {
     try {
+      // Validate file before upload
+      const validation = validateFileForFolder(file, folder);
+      if (!validation.valid) {
+        throw new Error(validation.error || 'File validation failed');
+      }
+
       // Sanitize file name - remove special characters
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const safeName = `${Date.now()}-${sanitizedName}`;
@@ -74,7 +81,34 @@ export const FirebaseService = {
       return url;
     } catch (error) {
       console.error('Firebase Storage upload error:', error);
-      throw new Error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Handle specific Firebase Storage errors
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string; message?: string };
+        switch (firebaseError.code) {
+          case 'storage/unauthorized':
+            throw new Error('You do not have permission to upload files. Please contact your administrator.');
+          case 'storage/canceled':
+            throw new Error('Upload was canceled. Please try again.');
+          case 'storage/unknown':
+            throw new Error('An unknown error occurred during upload. Please try again.');
+          case 'storage/invalid-format':
+            throw new Error('Invalid file format. Please check the file and try again.');
+          case 'storage/retry-limit-exceeded':
+            throw new Error('Upload failed after multiple attempts. Please check your connection and try again.');
+          case 'storage/quota-exceeded':
+            throw new Error('Storage quota exceeded. Please contact your administrator.');
+          default:
+            throw new Error(`Upload failed: ${firebaseError.message || 'Unknown error'}`);
+        }
+      }
+      
+      // Handle validation errors
+      if (error instanceof Error) {
+        throw error;
+      }
+      
+      throw new Error('Failed to upload file. Please try again.');
     }
   },
 

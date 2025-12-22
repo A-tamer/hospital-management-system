@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle } from 'lucide-react';
+import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, Download } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { useLanguage } from '../context/LanguageContext';
+import { generatePDFReport } from '../utils/pdfGenerator';
+import { useToast } from '../components/Toast';
 
 const PatientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { state } = usePatientContext();
   const { t } = useLanguage();
+  const { showSuccess, showError } = useToast();
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const patient = state.patients.find(p => p.id === id);
 
@@ -33,6 +37,19 @@ const PatientDetail: React.FC = () => {
     navigate(`/patients`, { state: { editPatientId: patient.id } });
   };
 
+  const handleExportPDF = async () => {
+    setIsExportingPDF(true);
+    try {
+      await generatePDFReport.singlePatient(patient, t);
+      showSuccess(t('detail.pdfExported') || 'Patient PDF exported successfully');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      showError(t('detail.pdfError') || 'Failed to generate PDF. Please try again.');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   return (
     <div className="patients-page fade-in" style={{ padding: '2rem', maxWidth: '100%' }}>
       {/* Patient Header Card */}
@@ -48,7 +65,7 @@ const PatientDetail: React.FC = () => {
                   height: '120px', 
                   borderRadius: '50%',
                   objectFit: 'cover',
-                  border: '4px solid var(--primary-teal)',
+                  border: '4px solid var(--primary-blue)',
                   boxShadow: '0 4px 12px rgba(58, 175, 169, 0.3)'
                 }}
               />
@@ -57,7 +74,7 @@ const PatientDetail: React.FC = () => {
                 width: '120px',
                 height: '120px',
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--primary-teal), var(--dark-teal))',
+                background: 'linear-gradient(135deg, var(--primary-blue), var(--primary-dark))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -80,7 +97,7 @@ const PatientDetail: React.FC = () => {
                   borderRadius: '20px',
                   fontSize: '0.875rem',
                   fontWeight: '600',
-                  color: 'var(--dark-teal)',
+                  color: 'var(--primary-dark)',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}>
                   {t('patients.patientCode')}: {patient.code}
@@ -95,6 +112,15 @@ const PatientDetail: React.FC = () => {
             <button className="btn btn-secondary" onClick={() => navigate('/patients')}>
               <ArrowLeft className="btn-icon" />
               {t('detail.backToPatients')}
+            </button>
+            <button 
+              className="btn btn-secondary" 
+              onClick={handleExportPDF}
+              disabled={isExportingPDF}
+              style={{ background: '#17a2b8', color: 'white', border: 'none' }}
+            >
+              <Download className="btn-icon" />
+              {isExportingPDF ? (t('detail.exportingPDF') || 'Generating PDF...') : (t('detail.exportPDF') || 'Export PDF')}
             </button>
             <button className="btn btn-primary" onClick={handleEdit}>
               <Edit className="btn-icon" />
@@ -119,7 +145,7 @@ const PatientDetail: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <UserCircle style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+                <UserCircle style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
               </div>
               <h3 className="card-title" style={{ margin: 0 }}>{t('detail.basicInfo')}</h3>
             </div>
@@ -133,7 +159,7 @@ const PatientDetail: React.FC = () => {
             </div>
             <div className="info-item">
               <span className="info-label">{t('patients.patientCode')}</span>
-              <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-teal)' }}>{patient.code}</span>
+              <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-blue)' }}>{patient.code}</span>
             </div>
             <div className="info-item">
               <span className="info-label">{t('patients.age')}</span>
@@ -148,7 +174,7 @@ const PatientDetail: React.FC = () => {
               <span className="info-value" style={{ 
                 fontSize: '1.1rem', 
                 fontWeight: '600', 
-                color: 'var(--primary-teal)',
+                color: 'var(--primary-blue)',
                 padding: '0.75rem',
                 background: 'rgba(58, 175, 169, 0.1)',
                 borderRadius: '8px',
@@ -190,7 +216,7 @@ const PatientDetail: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <Calendar style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+                <Calendar style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
               </div>
               <h3 className="card-title" style={{ margin: 0, fontSize: '1rem' }}>{t('detail.quickStats') || 'Quick Stats'}</h3>
             </div>
@@ -200,7 +226,7 @@ const PatientDetail: React.FC = () => {
               <div style={{ fontSize: '0.875rem', color: 'var(--secondary-gray)', marginBottom: '0.25rem' }}>
                 {t('detail.surgeriesCount') || 'Surgeries'}
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--primary-teal)' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--primary-blue)' }}>
                 {patient.surgeries?.length || 0}
               </div>
             </div>
@@ -208,7 +234,7 @@ const PatientDetail: React.FC = () => {
               <div style={{ fontSize: '0.875rem', color: 'var(--secondary-gray)', marginBottom: '0.25rem' }}>
                 {t('detail.followUpsCount') || 'Follow-ups'}
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--primary-teal)' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--primary-blue)' }}>
                 {patient.followUps?.length || 0}
               </div>
             </div>
@@ -216,7 +242,7 @@ const PatientDetail: React.FC = () => {
               <div style={{ fontSize: '0.875rem', color: 'var(--secondary-gray)', marginBottom: '0.25rem' }}>
                 {t('detail.filesCount') || 'Files'}
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--primary-teal)' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--primary-blue)' }}>
                 {(patient.files?.radiology?.length || 0) + (patient.files?.lab?.length || 0) + (patient.files?.personalImage ? 1 : 0) + (patient.files?.surgeryImage ? 1 : 0)}
               </div>
             </div>
@@ -238,19 +264,19 @@ const PatientDetail: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <FileText style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+                <FileText style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
               </div>
               <h3 className="card-title" style={{ margin: 0 }}>{t('detail.medicalNotes')}</h3>
             </div>
           </div>
           <div style={{ 
             padding: '1.5rem', 
-            background: 'var(--light-teal)', 
+            background: 'var(--light)', 
             borderRadius: '12px', 
             lineHeight: '1.8',
             border: '1px solid rgba(58, 175, 169, 0.2)'
           }}>
-            <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--dark-blue-gray)', fontSize: '1rem' }}>{patient.notes}</p>
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--dark)', fontSize: '1rem' }}>{patient.notes}</p>
           </div>
         </div>
       )}
@@ -269,7 +295,7 @@ const PatientDetail: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <Phone style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+                <Phone style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
               </div>
               <h3 className="card-title" style={{ margin: 0 }}>{t('detail.contactInfo')}</h3>
             </div>
@@ -299,7 +325,7 @@ const PatientDetail: React.FC = () => {
                   style={{ 
                     fontSize: '1.1rem',
                     fontWeight: '600', 
-                    color: 'var(--primary-teal)',
+                    color: 'var(--primary-blue)',
                     textDecoration: 'none'
                   }}
                 >
@@ -315,7 +341,7 @@ const PatientDetail: React.FC = () => {
                   className="info-value" 
                   style={{ 
                     fontSize: '1rem',
-                    color: 'var(--primary-teal)',
+                    color: 'var(--primary-blue)',
                     textDecoration: 'none'
                   }}
                 >
@@ -347,7 +373,7 @@ const PatientDetail: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <Heart style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+                <Heart style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
               </div>
               <h3 className="card-title" style={{ margin: 0 }}>{t('detail.surgeryDetails')}</h3>
             </div>
@@ -357,14 +383,14 @@ const PatientDetail: React.FC = () => {
             <div 
               key={index} 
               style={{ 
-                background: 'var(--light-teal)',
+                background: 'var(--light)',
                 padding: '1.5rem',
                 borderRadius: '12px',
                 border: '2px solid rgba(58, 175, 169, 0.2)',
                 transition: 'all 0.3s ease'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--primary-teal)';
+                e.currentTarget.style.borderColor = 'var(--primary-blue)';
                 e.currentTarget.style.transform = 'translateY(-2px)';
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(58, 175, 169, 0.2)';
               }}
@@ -386,7 +412,7 @@ const PatientDetail: React.FC = () => {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: 'var(--primary-teal)',
+                  background: 'var(--primary-blue)',
                   color: 'white',
                   display: 'flex',
                   alignItems: 'center',
@@ -396,7 +422,7 @@ const PatientDetail: React.FC = () => {
                 }}>
                   {index + 1}
                 </div>
-                <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: 'var(--dark-blue-gray)' }}>
+                <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: 'var(--dark)' }}>
                   {surgery.type || t('detail.surgery') + ' ' + (index + 1)}
                 </h4>
               </div>
@@ -414,7 +440,7 @@ const PatientDetail: React.FC = () => {
                 {surgery.cost && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.canViewFinancial) && (
                   <div className="info-item">
                     <span className="info-label">{t('detail.cost')}</span>
-                    <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-teal)' }}>
+                    <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-blue)' }}>
                       {surgery.cost} {surgery.costCurrency || 'USD'}
                     </span>
                   </div>
@@ -430,7 +456,7 @@ const PatientDetail: React.FC = () => {
                           borderRadius: '8px',
                           border: '1px solid rgba(58, 175, 169, 0.2)'
                         }}>
-                          <div style={{ fontWeight: '600', color: 'var(--dark-blue-gray)', marginBottom: '0.25rem' }}>{surgeon.name}</div>
+                          <div style={{ fontWeight: '600', color: 'var(--dark)', marginBottom: '0.25rem' }}>{surgeon.name}</div>
                           {surgeon.specialization && (
                             <div style={{ fontSize: '0.875rem', color: 'var(--secondary-gray)', marginBottom: '0.25rem' }}>
                               {surgeon.specialization}
@@ -439,7 +465,7 @@ const PatientDetail: React.FC = () => {
                           {surgeon.phone && (
                             <a 
                               href={`tel:${surgeon.phone}`}
-                              style={{ fontSize: '0.875rem', color: 'var(--primary-teal)', textDecoration: 'none' }}
+                              style={{ fontSize: '0.875rem', color: 'var(--primary-blue)', textDecoration: 'none' }}
                             >
                               {surgeon.phone}
                             </a>
@@ -459,7 +485,7 @@ const PatientDetail: React.FC = () => {
                       borderRadius: '8px',
                       whiteSpace: 'pre-wrap', 
                       lineHeight: '1.6',
-                      color: 'var(--dark-blue-gray)'
+                      color: 'var(--dark)'
                     }}>
                       {surgery.notes}
                     </div>
@@ -486,7 +512,7 @@ const PatientDetail: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <Calendar style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+                <Calendar style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
               </div>
               <h3 className="card-title" style={{ margin: 0 }}>{t('form.followUps')}</h3>
             </div>
@@ -497,13 +523,13 @@ const PatientDetail: React.FC = () => {
               key={index} 
               style={{ 
                 padding: '1.5rem',
-                background: 'var(--light-teal)',
+                background: 'var(--light)',
                 borderRadius: '12px',
                 border: '2px solid rgba(58, 175, 169, 0.2)',
                 transition: 'all 0.3s ease'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--primary-teal)';
+                e.currentTarget.style.borderColor = 'var(--primary-blue)';
                 e.currentTarget.style.transform = 'translateY(-2px)';
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(58, 175, 169, 0.2)';
               }}
@@ -519,7 +545,7 @@ const PatientDetail: React.FC = () => {
                     width: '32px',
                     height: '32px',
                     borderRadius: '8px',
-                    background: 'var(--primary-teal)',
+                    background: 'var(--primary-blue)',
                     color: 'white',
                     display: 'flex',
                     alignItems: 'center',
@@ -529,7 +555,7 @@ const PatientDetail: React.FC = () => {
                   }}>
                     #{followUp.number}
                   </div>
-                  <h4 style={{ margin: 0, color: 'var(--dark-blue-gray)', fontSize: '1.1rem', fontWeight: '600' }}>
+                  <h4 style={{ margin: 0, color: 'var(--dark)', fontSize: '1.1rem', fontWeight: '600' }}>
                     {t('detail.followUp')} {followUp.number}
                   </h4>
                 </div>
@@ -553,7 +579,7 @@ const PatientDetail: React.FC = () => {
                   padding: '1rem', 
                   background: 'var(--white)', 
                   borderRadius: '8px',
-                  color: 'var(--dark-blue-gray)', 
+                  color: 'var(--dark)', 
                   whiteSpace: 'pre-wrap', 
                   lineHeight: '1.8',
                   fontSize: '0.95rem'
@@ -580,7 +606,7 @@ const PatientDetail: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <ImageIcon style={{ width: '24px', height: '24px', color: 'var(--primary-teal)' }} />
+              <ImageIcon style={{ width: '24px', height: '24px', color: 'var(--primary-blue)' }} />
             </div>
             <h3 className="card-title" style={{ margin: 0 }}>{t('detail.filesAndImages')}</h3>
           </div>
@@ -593,11 +619,11 @@ const PatientDetail: React.FC = () => {
                 padding: '1.5rem', 
                 border: '2px solid rgba(58, 175, 169, 0.2)', 
                 borderRadius: '12px', 
-                background: 'var(--light-teal)',
+                background: 'var(--light)',
                 transition: 'all 0.3s ease'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--primary-teal)';
+                e.currentTarget.style.borderColor = 'var(--primary-blue)';
                 e.currentTarget.style.transform = 'translateY(-4px)';
                 e.currentTarget.style.boxShadow = '0 8px 16px rgba(58, 175, 169, 0.2)';
               }}
@@ -607,7 +633,7 @@ const PatientDetail: React.FC = () => {
                 e.currentTarget.style.boxShadow = 'none';
               }}
               >
-                <h4 style={{ marginBottom: '1rem', color: 'var(--dark-blue-gray)', fontWeight: '600' }}>{t('detail.personalImage')}</h4>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--dark)', fontWeight: '600' }}>{t('detail.personalImage')}</h4>
                 <img 
                   src={patient.files!.personalImage!} 
                   alt="Personal" 
@@ -630,11 +656,11 @@ const PatientDetail: React.FC = () => {
                 padding: '1.5rem', 
                 border: '2px solid rgba(58, 175, 169, 0.2)', 
                 borderRadius: '12px', 
-                background: 'var(--light-teal)',
+                background: 'var(--light)',
                 transition: 'all 0.3s ease'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--primary-teal)';
+                e.currentTarget.style.borderColor = 'var(--primary-blue)';
                 e.currentTarget.style.transform = 'translateY(-4px)';
                 e.currentTarget.style.boxShadow = '0 8px 16px rgba(58, 175, 169, 0.2)';
               }}
@@ -644,7 +670,7 @@ const PatientDetail: React.FC = () => {
                 e.currentTarget.style.boxShadow = 'none';
               }}
               >
-                <h4 style={{ marginBottom: '1rem', color: 'var(--dark-blue-gray)', fontWeight: '600' }}>{t('detail.surgeryImage')}</h4>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--dark)', fontWeight: '600' }}>{t('detail.surgeryImage')}</h4>
                 <img 
                   src={patient.files!.surgeryImage!} 
                   alt="Surgery" 
@@ -664,11 +690,11 @@ const PatientDetail: React.FC = () => {
             {patient.files.radiology && patient.files.radiology.length > 0 && (
               <div style={{ 
                 padding: '1.5rem', 
-                background: 'var(--light-teal)', 
+                background: 'var(--light)', 
                 borderRadius: '12px', 
                 border: '2px solid rgba(58, 175, 169, 0.2)'
               }}>
-                <h4 style={{ marginBottom: '1rem', color: 'var(--dark-blue-gray)', fontWeight: '600' }}>{t('detail.radiologyFiles')}</h4>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--dark)', fontWeight: '600' }}>{t('detail.radiologyFiles')}</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {patient.files.radiology.map((url, idx) => (
                     <a 
@@ -691,11 +717,11 @@ const PatientDetail: React.FC = () => {
             {patient.files.lab && patient.files.lab.length > 0 && (
               <div style={{ 
                 padding: '1.5rem', 
-                background: 'var(--light-teal)', 
+                background: 'var(--light)', 
                 borderRadius: '12px', 
                 border: '2px solid rgba(58, 175, 169, 0.2)'
               }}>
-                <h4 style={{ marginBottom: '1rem', color: 'var(--dark-blue-gray)', fontWeight: '600' }}>{t('detail.labFiles')}</h4>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--dark)', fontWeight: '600' }}>{t('detail.labFiles')}</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {patient.files.lab.map((url, idx) => (
                     <a 
@@ -721,11 +747,11 @@ const PatientDetail: React.FC = () => {
             textAlign: 'center', 
             padding: '4rem 2rem', 
             color: 'var(--secondary-gray)', 
-            background: 'var(--light-teal)', 
+            background: 'var(--light)', 
             borderRadius: '12px',
             border: '2px dashed rgba(58, 175, 169, 0.3)'
           }}>
-            <FileText style={{ width: '64px', height: '64px', margin: '0 auto 1rem', opacity: 0.4, color: 'var(--primary-teal)' }} />
+            <FileText style={{ width: '64px', height: '64px', margin: '0 auto 1rem', opacity: 0.4, color: 'var(--primary-blue)' }} />
             <p style={{ margin: 0, fontSize: '1rem' }}>{t('detail.noFiles')}</p>
           </div>
         )}
