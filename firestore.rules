@@ -1,0 +1,73 @@
+// ============================================
+// FIRESTORE SECURITY RULES - PRODUCTION
+// ============================================
+// Copy this entire file and paste it in:
+// Firebase Console → Firestore Database → Rules
+// ============================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // PATIENTS COLLECTION
+    // ==========================================
+    match /patients/{patientId} {
+      // Allow anyone to read patient data
+      // NOTE: Change to "request.auth != null" if you want only logged-in users
+      allow read: if true;
+      
+      // Allow anyone to create patients
+      // NOTE: Change to "request.auth != null" if you want only logged-in users
+      allow create: if true;
+      
+      // Allow anyone to update patients
+      // NOTE: Change to "request.auth != null" if you want only logged-in users
+      allow update: if true;
+      
+      // Allow anyone to delete patients
+      // NOTE: Change to "request.auth != null" if you want only logged-in users
+      // Or set to "false" to prevent deletion
+      allow delete: if true;
+    }
+    
+    // ==========================================
+    // USERS COLLECTION
+    // ==========================================
+    match /users/{userId} {
+      // Allow anyone to read users
+      allow read: if true;
+      
+      // Allow anyone to create users
+      allow create: if true;
+      
+      // Allow anyone to update users
+      allow update: if true;
+      
+      // Prevent deletion of users (recommended)
+      allow delete: if false;
+    }
+    
+    // ==========================================
+    // DENY ALL OTHER COLLECTIONS
+    // ==========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ============================================
+// SECURITY NOTES:
+// ============================================
+// 1. Current rules allow public access
+// 2. This is OK for development/testing
+// 3. For production with real patient data:
+//    - Enable Firebase Authentication
+//    - Change "if true" to "if request.auth != null"
+//    - This ensures only logged-in users can access
+// 4. For maximum security:
+//    - Implement role-based access control
+//    - See PRODUCTION_SECURITY_GUIDE.md for details
+// ============================================
+

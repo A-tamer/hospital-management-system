@@ -1,0 +1,66 @@
+// ============================================
+// STORAGE SECURITY RULES - PRODUCTION
+// ============================================
+// Copy this entire file and paste it in:
+// Firebase Console → Storage → Rules
+// ============================================
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ==========================================
+    // PATIENT FILES
+    // ==========================================
+    match /patients/{patientCode}/{folder}/{fileName} {
+      // Allow anyone to read files
+      // NOTE: Change to "request.auth != null" for better security
+      allow read: if true;
+      
+      // Allow anyone to upload files with validation
+      allow write: if 
+        // Max file size: 10MB
+        request.resource.size < 10 * 1024 * 1024
+        // Only allow images and PDFs
+        && (request.resource.contentType.matches('image/.*') 
+            || request.resource.contentType == 'application/pdf');
+      
+      // Allow deletion
+      // NOTE: Change to "false" to prevent file deletion
+      allow delete: if true;
+    }
+    
+    // ==========================================
+    // DENY ALL OTHER PATHS
+    // ==========================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ============================================
+// VALIDATION RULES EXPLAINED:
+// ============================================
+// 1. Max file size: 10MB (10 * 1024 * 1024 bytes)
+// 2. Allowed types:
+//    - Images: JPEG, PNG, WebP, GIF
+//    - Documents: PDF only
+// 3. Folder structure:
+//    /patients/{patientCode}/personal/{filename}
+//    /patients/{patientCode}/surgery/{filename}
+//    /patients/{patientCode}/radiology/{filename}
+//    /patients/{patientCode}/lab/{filename}
+// ============================================
+
+// ============================================
+// SECURITY NOTES:
+// ============================================
+// 1. Current rules allow public read/write
+// 2. File size is limited to prevent abuse
+// 3. Only image and PDF uploads allowed
+// 4. For better security:
+//    - Change "if true" to "if request.auth != null"
+//    - Restrict delete to admins only
+// ============================================
+

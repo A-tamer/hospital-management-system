@@ -278,6 +278,7 @@ const Statistics: React.FC = () => {
       totalPatients: state.patients.length,
       diagnosedPatients: state.patients.filter(p => p.status === 'Diagnosed').length,
       preOpPatients: state.patients.filter(p => p.status === 'Pre-op').length,
+      opPatients: state.patients.filter(p => p.status === 'Op').length,
       postOpPatients: state.patients.filter(p => p.status === 'Post-op').length,
       patientsByDiagnosis: chartData.diagnosisData,
       monthlyVisits: chartData.monthlyData.reduce((acc, item) => {

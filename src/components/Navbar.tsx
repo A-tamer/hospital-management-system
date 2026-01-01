@@ -44,7 +44,7 @@ const Navbar: React.FC = () => {
         <div className="navbar-brand">
           <img 
             src="/imgs/logo.jpg" 
-            alt="SurgiCare" 
+            alt="Surgicare" 
             className="brand-logo" 
             style={{ 
               width: '60px', 
@@ -55,7 +55,7 @@ const Navbar: React.FC = () => {
               border: '2px solid rgba(255, 255, 255, 0.3)'
             }} 
           />
-          <span className="brand-text">SurgiCare</span>
+          <span className="brand-text" style={{ fontSize: '1.75rem', fontWeight: '700', letterSpacing: '0.5px' }}>Surgicare</span>
         </div>
         
         <div className="navbar-menu">

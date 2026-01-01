@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, Download } from 'lucide-react';
+import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, Download, LogIn, LogOut } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { useLanguage } from '../context/LanguageContext';
 import { generatePDFReport } from '../utils/pdfGenerator';
 import { useToast } from '../components/Toast';
+import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 
 const PatientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +13,9 @@ const PatientDetail: React.FC = () => {
   const { state } = usePatientContext();
   const { t } = useLanguage();
   const { showSuccess, showError } = useToast();
+  const { updatePatient } = useFirebaseOperations();
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
 
   const patient = state.patients.find(p => p.id === id);
 
@@ -47,6 +50,42 @@ const PatientDetail: React.FC = () => {
       showError(t('detail.pdfError') || 'Failed to generate PDF. Please try again.');
     } finally {
       setIsExportingPDF(false);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (!patient.id) return;
+    setIsUpdatingPresence(true);
+    try {
+      await updatePatient(patient.id, {
+        ...patient,
+        presentAtClinic: true,
+        clinicCheckInTime: new Date().toISOString()
+      } as any);
+      showSuccess('Patient checked in successfully');
+    } catch (error) {
+      console.error('Check-in error:', error);
+      showError('Failed to check in patient. Please try again.');
+    } finally {
+      setIsUpdatingPresence(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!patient.id) return;
+    setIsUpdatingPresence(true);
+    try {
+      await updatePatient(patient.id, {
+        ...patient,
+        presentAtClinic: false,
+        clinicCheckInTime: undefined
+      } as any);
+      showSuccess('Patient checked out successfully');
+    } catch (error) {
+      console.error('Check-out error:', error);
+      showError('Failed to check out patient. Please try again.');
+    } finally {
+      setIsUpdatingPresence(false);
     }
   };
 
@@ -103,8 +142,45 @@ const PatientDetail: React.FC = () => {
                   {t('patients.patientCode')}: {patient.code}
                 </span>
                 <span className={`status-badge status-${patient.status.toLowerCase().replace('-', '-')}`}>
-                  {patient.status === 'Diagnosed' ? t('status.diagnosed') : patient.status === 'Pre-op' ? t('status.preOp') : t('status.postOp')}
+                  {patient.status === 'Diagnosed' ? t('status.diagnosed') : 
+                   patient.status === 'Pre-op' ? t('status.preOp') : 
+                   patient.status === 'Op' ? 'Op' :
+                   t('status.postOp')}
                 </span>
+                
+                {/* Present at Clinic Indicator */}
+                {(patient as any).presentAtClinic && (
+                  <span style={{ 
+                    padding: '0.5rem 1rem', 
+                    background: '#28a745', 
+                    color: 'white',
+                    borderRadius: '20px',
+                    fontSize: '0.875rem',
+                    fontWeight: '600',
+                    boxShadow: '0 2px 4px rgba(40, 167, 69, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    animation: 'pulse 2s infinite'
+                  }}>
+                    <span style={{ 
+                      width: '8px', 
+                      height: '8px', 
+                      background: 'white', 
+                      borderRadius: '50%',
+                      display: 'inline-block'
+                    }}></span>
+                    Present at Clinic
+                    {(patient as any).clinicCheckInTime && (
+                      <span style={{ fontSize: '0.75rem', opacity: 0.9 }}>
+                        (Since {new Date((patient as any).clinicCheckInTime).toLocaleTimeString('en-US', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })})
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -122,6 +198,44 @@ const PatientDetail: React.FC = () => {
               <Download className="btn-icon" />
               {isExportingPDF ? (t('detail.exportingPDF') || 'Generating PDF...') : (t('detail.exportPDF') || 'Export PDF')}
             </button>
+            
+            {/* Check-In / Check-Out Buttons */}
+            {(patient as any).presentAtClinic ? (
+              <button 
+                className="btn" 
+                onClick={handleCheckOut}
+                disabled={isUpdatingPresence}
+                style={{ 
+                  background: '#dc3545', 
+                  color: 'white', 
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <LogOut className="btn-icon" />
+                {isUpdatingPresence ? 'Checking Out...' : 'Check Out'}
+              </button>
+            ) : (
+              <button 
+                className="btn" 
+                onClick={handleCheckIn}
+                disabled={isUpdatingPresence}
+                style={{ 
+                  background: '#28a745', 
+                  color: 'white', 
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <LogIn className="btn-icon" />
+                {isUpdatingPresence ? 'Checking In...' : 'Check In'}
+              </button>
+            )}
+            
             <button className="btn btn-primary" onClick={handleEdit}>
               <Edit className="btn-icon" />
               {t('patients.editPatient')}
@@ -162,13 +276,65 @@ const PatientDetail: React.FC = () => {
               <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-blue)' }}>{patient.code}</span>
             </div>
             <div className="info-item">
-              <span className="info-label">{t('patients.age')}</span>
-              <span className="info-value" style={{ fontSize: '1.1rem' }}>{patient.age} {t('stats.years')}</span>
+              <span className="info-label">Date of Birth</span>
+              <span className="info-value" style={{ fontSize: '1.1rem' }}>
+                {(patient as any).dateOfBirth 
+                  ? new Date((patient as any).dateOfBirth).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                  : 'N/A'}
+                {(patient as any).dateOfBirth && (
+                  <span style={{ fontSize: '0.9rem', color: '#666', marginLeft: '0.5rem' }}>
+                    ({(() => {
+                      const dob = new Date((patient as any).dateOfBirth);
+                      const today = new Date();
+                      let years = today.getFullYear() - dob.getFullYear();
+                      let months = today.getMonth() - dob.getMonth();
+                      if (months < 0 || (months === 0 && today.getDate() < dob.getDate())) {
+                        years--;
+                        months += 12;
+                      }
+                      if (years > 0) {
+                        return months > 0 ? `${years}y ${months}m` : `${years} years`;
+                      } else {
+                        const days = Math.floor((today.getTime() - dob.getTime()) / (1000 * 60 * 60 * 24));
+                        return months > 0 ? `${months} months` : `${days} days`;
+                      }
+                    })()})
+                  </span>
+                )}
+              </span>
             </div>
             <div className="info-item">
               <span className="info-label">{t('patients.gender')}</span>
               <span className="info-value" style={{ fontSize: '1.1rem' }}>{patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')}</span>
             </div>
+            {(patient as any).weight && (
+              <div className="info-item">
+                <span className="info-label">Weight</span>
+                <span className="info-value" style={{ fontSize: '1.1rem' }}>{(patient as any).weight} kg</span>
+              </div>
+            )}
+            {(patient as any).clinicBranch && (
+              <div className="info-item">
+                <span className="info-label">Clinic Branch</span>
+                <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600' }}>{(patient as any).clinicBranch}</span>
+              </div>
+            )}
+            {(patient as any).referringDoctor && (
+              <div className="info-item">
+                <span className="info-label">Referring Doctor</span>
+                <span className="info-value" style={{ fontSize: '1.1rem' }}>{(patient as any).referringDoctor}</span>
+              </div>
+            )}
+            {((patient as any).governorate || (patient as any).city) && (
+              <div className="info-item">
+                <span className="info-label">Location</span>
+                <span className="info-value" style={{ fontSize: '1.1rem' }}>
+                  {(patient as any).city && (patient as any).governorate 
+                    ? `${(patient as any).city}, ${(patient as any).governorate}`
+                    : (patient as any).city || (patient as any).governorate}
+                </span>
+              </div>
+            )}
             <div className="info-item" style={{ gridColumn: 'span 2' }}>
               <span className="info-label">{t('patients.diagnosis')}</span>
               <span className="info-value" style={{ 
@@ -355,6 +521,64 @@ const PatientDetail: React.FC = () => {
                 <span className="info-value" style={{ fontSize: '1rem', lineHeight: '1.6' }}>{patient.contactInfo.address}</span>
               </div>
             )}
+            {(patient as any).governorate && (
+              <div className="info-item">
+                <span className="info-label">Governorate / المحافظة</span>
+                <span className="info-value" style={{ fontSize: '1rem' }}>{(patient as any).governorate}</span>
+              </div>
+            )}
+            {(patient as any).city && (
+              <div className="info-item">
+                <span className="info-label">City / المدينة</span>
+                <span className="info-value" style={{ fontSize: '1rem' }}>{(patient as any).city}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Planned Surgery */}
+      {(patient as any).plannedSurgery && ((patient as any).plannedSurgery.operation || (patient as any).plannedSurgery.estimatedCost) && (
+        <div className="card" style={{ marginBottom: '2rem', border: '2px solid #ffc107', background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.05) 0%, rgba(255, 193, 7, 0.02) 100%)' }}>
+          <div className="card-header" style={{ borderBottom: '2px solid rgba(255, 193, 7, 0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ 
+                width: '40px', 
+                height: '40px', 
+                borderRadius: '10px', 
+                background: '#ffc107',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Calendar style={{ width: '24px', height: '24px', color: 'white' }} />
+              </div>
+              <h3 className="card-title" style={{ margin: 0 }}>Planned Surgery</h3>
+            </div>
+          </div>
+          <div className="info-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', padding: '1.5rem' }}>
+            {(patient as any).plannedSurgery.operationCategory && (
+              <div className="info-item">
+                <span className="info-label">Operation Category</span>
+                <span className="info-value" style={{ fontSize: '1rem' }}>{(patient as any).plannedSurgery.operationCategory}</span>
+              </div>
+            )}
+            {(patient as any).plannedSurgery.operation && (
+              <div className="info-item" style={{ gridColumn: 'span 2' }}>
+                <span className="info-label">Planned Operation</span>
+                <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600', color: '#f57c00' }}>
+                  {(patient as any).plannedSurgery.operation}
+                </span>
+              </div>
+            )}
+            {(patient as any).plannedSurgery.estimatedCost && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.canViewFinancial) && (
+              <div className="info-item">
+                <span className="info-label">Estimated Cost</span>
+                <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-blue)' }}>
+                  {(patient as any).plannedSurgery.estimatedCost} {(patient as any).plannedSurgery.costCurrency || 'EGP'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -437,11 +661,19 @@ const PatientDetail: React.FC = () => {
                     })}
                   </span>
                 </div>
+                {(surgery as any).operation && (
+                  <div className="info-item" style={{ gridColumn: 'span 2' }}>
+                    <span className="info-label">Operation</span>
+                    <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-dark)' }}>
+                      {(surgery as any).operation}
+                    </span>
+                  </div>
+                )}
                 {surgery.cost && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.canViewFinancial) && (
                   <div className="info-item">
                     <span className="info-label">{t('detail.cost')}</span>
                     <span className="info-value" style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--primary-blue)' }}>
-                      {surgery.cost} {surgery.costCurrency || 'USD'}
+                      {surgery.cost} {surgery.costCurrency || 'EGP'}
                     </span>
                   </div>
                 )}
@@ -488,6 +720,51 @@ const PatientDetail: React.FC = () => {
                       color: 'var(--dark)'
                     }}>
                       {surgery.notes}
+                    </div>
+                  </div>
+                )}
+                {(surgery as any).photos && (surgery as any).photos.length > 0 && (
+                  <div className="info-item" style={{ gridColumn: 'span 2' }}>
+                    <span className="info-label">Surgery Photos</span>
+                    <div style={{ 
+                      marginTop: '0.75rem',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                      gap: '1rem'
+                    }}>
+                      {(surgery as any).photos.map((photoUrl: string, photoIndex: number) => (
+                        <div key={photoIndex} style={{
+                          position: 'relative',
+                          paddingTop: '100%',
+                          borderRadius: '12px',
+                          overflow: 'hidden',
+                          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                          cursor: 'pointer',
+                          transition: 'transform 0.2s, box-shadow 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.05)';
+                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.15)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
+                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                        }}
+                        onClick={() => window.open(photoUrl, '_blank')}>
+                          <img
+                            src={photoUrl}
+                            alt={`Surgery ${index + 1} Photo ${photoIndex + 1}`}
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -582,9 +859,56 @@ const PatientDetail: React.FC = () => {
                   color: 'var(--dark)', 
                   whiteSpace: 'pre-wrap', 
                   lineHeight: '1.8',
-                  fontSize: '0.95rem'
+                  fontSize: '0.95rem',
+                  marginBottom: '1rem'
                 }}>
                   {followUp.notes}
+                </div>
+              )}
+              {(followUp as any).photos && (followUp as any).photos.length > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--secondary-gray)', marginBottom: '0.75rem', fontWeight: '600' }}>
+                    Follow-up Photos
+                  </div>
+                  <div style={{ 
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                    gap: '0.75rem'
+                  }}>
+                    {(followUp as any).photos.map((photoUrl: string, photoIndex: number) => (
+                      <div key={photoIndex} style={{
+                        position: 'relative',
+                        paddingTop: '100%',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s, box-shadow 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.1)';
+                      }}
+                      onClick={() => window.open(photoUrl, '_blank')}>
+                        <img
+                          src={photoUrl}
+                          alt={`Follow-up ${followUp.number} Photo ${photoIndex + 1}`}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -3,14 +3,19 @@
   "name": "SurgiCare",
   "icons": [
     {
-      "src": "/logo1921.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "logo.jpg",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/jpg"
     },
     {
-      "src": "/logo5121.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "logo.jpg",
+      "type": "image/jpg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo.jpg",
+      "type": "image/jpg",
+      "sizes": "512x512"
     }
   ],
   "start_url": ".",

@@ -10,7 +10,9 @@ import {
   SortAsc,
   SortDesc,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { Patient, FilterOptions } from '../types';
@@ -23,7 +25,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 
 const Patients: React.FC = () => {
   const { state, dispatch } = usePatientContext();
-  const { deletePatient } = useFirebaseOperations();
+  const { deletePatient, updatePatient } = useFirebaseOperations();
   const { t } = useLanguage();
   const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
@@ -34,10 +36,11 @@ const Patients: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
+  const [updatingPresence, setUpdatingPresence] = useState<string | null>(null);
 
   // Check if we need to open edit form from navigation state
   useEffect(() => {
-    const navState = location.state as { editPatientId?: string } | null;
+    const navState = location.state as { editPatientId?: string; showPresentOnly?: boolean; filterStatus?: string } | null;
     if (navState?.editPatientId) {
       const patient = state.patients.find((p: Patient) => p.id === navState.editPatientId);
       if (patient) {
@@ -46,6 +49,18 @@ const Patients: React.FC = () => {
         // Clear state after using it
         navigate(location.pathname, { replace: true, state: {} });
       }
+    }
+    // Auto-enable present filter if coming from dashboard
+    if (navState?.showPresentOnly) {
+      setFilters(prev => ({ ...prev, presentOnly: true }));
+      // Clear state after using it
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // Auto-enable status filter if coming from dashboard
+    if (navState?.filterStatus) {
+      setFilters(prev => ({ ...prev, status: navState.filterStatus || '' }));
+      // Clear state after using it
+      navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, state.patients, navigate, location.pathname]);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -56,6 +71,7 @@ const Patients: React.FC = () => {
     month: '',
     sortBy: 'name',
     sortOrder: 'asc',
+    presentOnly: false,
   });
 
   const filteredPatients = useMemo(() => {
@@ -100,6 +116,11 @@ const Patients: React.FC = () => {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         return month === filters.month;
       });
+    }
+
+    // Present at clinic filter
+    if (filters.presentOnly) {
+      filtered = filtered.filter(patient => (patient as any).presentAtClinic === true);
     }
 
     // Sort
@@ -166,6 +187,42 @@ const Patients: React.FC = () => {
   const handleDelete = (id: string) => {
     setPatientToDelete(id);
     setShowDeleteConfirm(true);
+  };
+
+  const handleCheckIn = async (patient: Patient) => {
+    if (!patient.id) return;
+    setUpdatingPresence(patient.id);
+    try {
+      await updatePatient(patient.id, {
+        ...patient,
+        presentAtClinic: true,
+        clinicCheckInTime: new Date().toISOString()
+      } as any);
+      showSuccess('Patient checked in successfully');
+    } catch (error) {
+      console.error('Check-in error:', error);
+      showError('Failed to check in patient');
+    } finally {
+      setUpdatingPresence(null);
+    }
+  };
+
+  const handleCheckOut = async (patient: Patient) => {
+    if (!patient.id) return;
+    setUpdatingPresence(patient.id);
+    try {
+      await updatePatient(patient.id, {
+        ...patient,
+        presentAtClinic: false,
+        clinicCheckInTime: undefined
+      } as any);
+      showSuccess('Patient checked out successfully');
+    } catch (error) {
+      console.error('Check-out error:', error);
+      showError('Failed to check out patient');
+    } finally {
+      setUpdatingPresence(null);
+    }
   };
 
   const confirmDelete = async () => {
@@ -251,7 +308,7 @@ const Patients: React.FC = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.search, filters.diagnosis, filters.status, filters.year, filters.month]);
+  }, [filters.search, filters.diagnosis, filters.status, filters.year, filters.month, filters.presentOnly]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -313,6 +370,7 @@ const Patients: React.FC = () => {
               <option value="">{t('patients.allStatus')}</option>
               <option value="Diagnosed">{t('status.diagnosed')}</option>
               <option value="Pre-op">{t('status.preOp')}</option>
+              <option value="Op">Op</option>
               <option value="Post-op">{t('status.postOp')}</option>
             </select>
 
@@ -337,6 +395,35 @@ const Patients: React.FC = () => {
                 <option key={month} value={month}>{month}</option>
               ))}
             </select>
+            
+            {/* Present at Clinic Toggle */}
+            <button
+              onClick={() => setFilters(prev => ({ ...prev, presentOnly: !prev.presentOnly }))}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                border: filters.presentOnly ? '2px solid #28a745' : '2px solid #dee2e6',
+                background: filters.presentOnly ? '#28a745' : 'white',
+                color: filters.presentOnly ? 'white' : '#495057',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span style={{ 
+                width: '8px', 
+                height: '8px', 
+                background: filters.presentOnly ? 'white' : '#28a745', 
+                borderRadius: '50%',
+                display: 'inline-block'
+              }}></span>
+              {filters.presentOnly ? 'Present Patients' : 'Show Present Only'}
+            </button>
           </div>
         </div>
       </div>
@@ -415,8 +502,16 @@ const Patients: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                paginatedPatients.map((patient) => (
-                  <tr key={patient.id}>
+                paginatedPatients.map((patient) => {
+                  const isUndiagnosed = !patient.diagnosis || patient.diagnosis === 'Undiagnosed';
+                  return (
+                  <tr 
+                    key={patient.id}
+                    style={isUndiagnosed ? { 
+                      backgroundColor: '#fff3cd', 
+                      borderLeft: '4px solid #ffc107' 
+                    } : {}}
+                  >
                     <td>
                       <div className="patient-code">{patient.code}</div>
                     </td>
@@ -431,11 +526,40 @@ const Patients: React.FC = () => {
                     </td>
                     <td>
                       <div className="patient-details">
-                        {patient.age} {t('patients.yearsOld')} • {patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')}
+                        {(() => {
+                          if ((patient as any).dateOfBirth) {
+                            const dob = new Date((patient as any).dateOfBirth);
+                            const today = new Date();
+                            let years = today.getFullYear() - dob.getFullYear();
+                            let months = today.getMonth() - dob.getMonth();
+                            if (months < 0 || (months === 0 && today.getDate() < dob.getDate())) {
+                              years--;
+                              months += 12;
+                            }
+                            if (years > 0) {
+                              return months > 0 ? `${years}y ${months}m` : `${years} ${t('patients.yearsOld')}`;
+                            } else {
+                              const days = Math.floor((today.getTime() - dob.getTime()) / (1000 * 60 * 60 * 24));
+                              return months > 0 ? `${months} months` : `${days} days`;
+                            }
+                          } else {
+                            return `${Math.floor(patient.age)} ${t('patients.yearsOld')}`;
+                          }
+                        })()}
+                        {' • '}
+                        {patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')}
                       </div>
                     </td>
                     <td>
-                      <div className="patient-diagnosis">{patient.diagnosis}</div>
+                      <div className="patient-diagnosis">
+                        {isUndiagnosed ? (
+                          <span style={{ color: '#856404', fontWeight: 'bold' }}>
+                            ⚠️ Undiagnosed
+                          </span>
+                        ) : (
+                          patient.diagnosis
+                        )}
+                      </div>
                     </td>
                     <td>
                       <div className="patient-date">
@@ -444,11 +568,53 @@ const Patients: React.FC = () => {
                     </td>
                     <td>
                       <span className={`status-badge status-${patient.status.toLowerCase().replace('-', '-')}`}>
-                        {patient.status === 'Diagnosed' ? t('status.diagnosed') : patient.status === 'Pre-op' ? t('status.preOp') : t('status.postOp')}
+                        {patient.status === 'Diagnosed' ? t('status.diagnosed') : 
+                         patient.status === 'Pre-op' ? t('status.preOp') : 
+                         patient.status === 'Op' ? 'Op' : 
+                         t('status.postOp')}
                       </span>
                     </td>
                     <td>
-                      <div className="action-buttons">
+                      <div className="action-buttons" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                        {/* Check-In / Check-Out Button */}
+                        {(patient as any).presentAtClinic ? (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => handleCheckOut(patient)}
+                            disabled={updatingPresence === patient.id}
+                            title="Check Out"
+                            style={{ 
+                              background: '#dc3545', 
+                              color: 'white',
+                              minWidth: '36px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0.5rem'
+                            }}
+                          >
+                            <LogOut size={16} />
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => handleCheckIn(patient)}
+                            disabled={updatingPresence === patient.id}
+                            title="Check In"
+                            style={{ 
+                              background: '#28a745', 
+                              color: 'white',
+                              minWidth: '36px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0.5rem'
+                            }}
+                          >
+                            <LogIn size={16} />
+                          </button>
+                        )}
+                        
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleEdit(patient)}
@@ -468,7 +634,8 @@ const Patients: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

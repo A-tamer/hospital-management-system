@@ -16,6 +16,7 @@ export interface SurgeryRecord {
   id?: string;
   date: string; // ISO date string
   type: string;
+  operation?: string; // Operation performed
   surgeons: Surgeon[]; // Multiple surgeons
   notes?: string;
   cost?: number;
@@ -27,6 +28,15 @@ export interface FollowUp {
   number: number;
   date: string;
   notes: string;
+  photos?: string[]; // Array of photo URLs
+}
+
+export interface PlannedSurgery {
+  id?: string;
+  operationCategory?: string;
+  operation?: string;
+  estimatedCost?: number;
+  costCurrency?: string;
 }
 
 export interface PatientFiles {
@@ -47,11 +57,12 @@ export interface Patient {
   fullNameArabic: string; // Arabic name (required)
   fullName?: string; // English name (optional, for backward compatibility)
   age: number;
+  weight?: number; // Weight in kg
   gender: 'Male' | 'Female' | 'Other';
   diagnosis: string;
   diagnosisCategory?: string; // For hierarchy
   visitedDate: string; // Changed from admissionDate
-  status: 'Diagnosed' | 'Pre-op' | 'Post-op'; // Updated status
+  status: 'Diagnosed' | 'Pre-op' | 'Op' | 'Post-op'; // Updated status with Op
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -62,11 +73,24 @@ export interface Patient {
   // Multiple surgeries
   surgeries?: SurgeryRecord[];
   
+  // Planned surgery
+  plannedSurgery?: PlannedSurgery;
+  
   // Multiple follow-ups
   followUps?: FollowUp[];
   
   // Reorganized files
   files?: PatientFiles;
+  
+  // Referring doctor
+  referringDoctor?: string;
+  
+  // Clinic branch
+  clinicBranch?: 'Cairo Clinic' | 'Mansoura Clinic';
+  
+  // Present at clinic (for check-in/check-out)
+  presentAtClinic?: boolean;
+  clinicCheckInTime?: string; // ISO timestamp
 }
 
 export interface User {
@@ -87,6 +111,7 @@ export interface DashboardStats {
   totalPatients: number;
   diagnosedPatients: number;
   preOpPatients: number;
+  opPatients: number;
   postOpPatients: number;
   patientsByDiagnosis: { [key: string]: number };
   monthlyVisits: { [key: string]: number };
@@ -98,6 +123,7 @@ export interface FilterOptions {
   status: string;
   year: string;
   month?: string;
+  presentOnly?: boolean; // Show only patients present at clinic
   sortBy: 'name' | 'date' | 'status';
   sortOrder: 'asc' | 'desc';
 }
