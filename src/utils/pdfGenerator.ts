@@ -1,11 +1,41 @@
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Patient, DashboardStats } from '../types';
 
 export class PDFReportGenerator {
   private doc: jsPDF;
+  private static arabicFontsLoaded = false;
 
   constructor() {
     this.doc = new jsPDF();
+  }
+
+  private isArabicText(text: string): boolean {
+    return /[\u0600-\u06FF]/.test(text);
+  }
+
+  private sanitizeFilenamePart(value: string): string {
+    return value
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, '-') // Windows forbidden chars
+      .replace(/\s+/g, ' ')
+      .substring(0, 80);
+  }
+
+  private getStatusStyle(status: Patient['status']) {
+    const base = { bg: [108, 117, 125] as [number, number, number], text: 'white' as const };
+    switch (status) {
+      case 'Diagnosed':
+        return { bg: [0, 123, 255] as [number, number, number], text: 'white' as const };
+      case 'Pre-op':
+        return { bg: [255, 193, 7] as [number, number, number], text: 'black' as const };
+      case 'Op':
+        return { bg: [220, 53, 69] as [number, number, number], text: 'white' as const };
+      case 'Post-op':
+        return { bg: [40, 167, 69] as [number, number, number], text: 'white' as const };
+      default:
+        return base;
+    }
   }
 
   private addHeader(title: string, subtitle?: string) {
@@ -90,6 +120,47 @@ export class PDFReportGenerator {
     });
     
     return currentY;
+  }
+
+  private async loadAssetAsBase64(url: string): Promise<string> {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error loading asset:', error);
+      return '';
+    }
+  }
+
+  private async ensureArabicFontsLoaded(): Promise<void> {
+    if (PDFReportGenerator.arabicFontsLoaded) return;
+
+    const regularDataUrl = await this.loadAssetAsBase64('/fonts/Amiri-Regular.ttf');
+    const boldDataUrl = await this.loadAssetAsBase64('/fonts/Amiri-Bold.ttf');
+
+    const regularBase64 = regularDataUrl.split(',')[1] || '';
+    const boldBase64 = boldDataUrl.split(',')[1] || '';
+
+    if (!regularBase64 || !boldBase64) {
+      console.warn('Arabic fonts not loaded; Arabic text may not render correctly.');
+      return;
+    }
+
+    // Register font with jsPDF
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const docAny = this.doc as any;
+    docAny.addFileToVFS('Amiri-Regular.ttf', regularBase64);
+    docAny.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+    docAny.addFileToVFS('Amiri-Bold.ttf', boldBase64);
+    docAny.addFont('Amiri-Bold.ttf', 'Amiri', 'bold');
+
+    PDFReportGenerator.arabicFontsLoaded = true;
   }
 
   generatePatientReport(patients: Patient[], title: string = 'Patient Records Report') {
@@ -296,7 +367,10 @@ export class PDFReportGenerator {
 
   // Generate a modern, friendly single patient PDF
   async generateSinglePatientPDF(patient: Patient, t: (key: string) => string): Promise<void> {
+    await this.ensureArabicFontsLoaded();
+
     const pageWidth = this.doc.internal.pageSize.width;
+    const pageHeight = this.doc.internal.pageSize.height;
     const margin = 20;
     let currentY = 25;
 
@@ -315,371 +389,409 @@ export class PDFReportGenerator {
       }
     }
 
-    // Header with rounded logo (left aligned with text on right)
-    const logoSize = 40;
-    
+    const primary = [23, 162, 184] as [number, number, number]; // teal
+    const dark = [20, 33, 61] as [number, number, number]; // navy
+
+    const safeDob = (patient as any).dateOfBirth ? new Date((patient as any).dateOfBirth) : null;
+    const visitedDate = patient.visitedDate ? new Date(patient.visitedDate) : ((patient as any).admissionDate ? new Date((patient as any).admissionDate) : null);
+    const governorate = (patient as any).governorate as string | undefined;
+    const city = (patient as any).city as string | undefined;
+    const weight = (patient as any).weight as number | undefined;
+    const clinicBranch = (patient as any).clinicBranch as string | undefined;
+    const referringDoctor = (patient as any).referringDoctor as string | undefined;
+    const presentAtClinic = (patient as any).presentAtClinic as boolean | undefined;
+    const checkInTime = (patient as any).clinicCheckInTime as string | undefined;
+
+    const ageDisplay = (() => {
+      if (safeDob) {
+        const today = new Date();
+        let years = today.getFullYear() - safeDob.getFullYear();
+        let months = today.getMonth() - safeDob.getMonth();
+        if (months < 0 || (months === 0 && today.getDate() < safeDob.getDate())) {
+          years--;
+          months += 12;
+        }
+        if (years > 0) return months > 0 ? `${years}y ${months}m` : `${years}y`;
+        const days = Math.max(0, Math.floor((today.getTime() - safeDob.getTime()) / (1000 * 60 * 60 * 24)));
+        return months > 0 ? `${months}m` : `${days}d`;
+      }
+      return patient.age ? `${patient.age}y` : '—';
+    })();
+
+    const text = (value: string, x: number, y: number, opts?: { bold?: boolean; size?: number; color?: [number, number, number]; align?: 'left' | 'right' | 'center'; rtl?: boolean }) => {
+      const size = opts?.size ?? 10;
+      const align = opts?.align ?? 'left';
+      const color = opts?.color ?? [0, 0, 0];
+      this.doc.setFontSize(size);
+      const isArabic = opts?.rtl ?? this.isArabicText(value);
+      const canUseAmiri = PDFReportGenerator.arabicFontsLoaded && isArabic;
+      this.doc.setFont(canUseAmiri ? 'Amiri' : 'helvetica', opts?.bold ? 'bold' : 'normal');
+      this.doc.setTextColor(color[0], color[1], color[2]);
+      this.doc.text(value, x, y, { align, isInputRtl: isArabic });
+    };
+
+    const drawCard = (title: string, y: number) => {
+      const cardX = margin;
+      const cardW = pageWidth - margin * 2;
+      const headerH = 12;
+      const padding = 10;
+      // card header background
+      this.doc.setFillColor(primary[0], primary[1], primary[2]);
+      this.doc.roundedRect(cardX, y, cardW, headerH, 4, 4, 'F');
+      text(title, cardX + 8, y + 8.5, { bold: true, size: 11, color: [255, 255, 255] });
+      // card body outline
+      this.doc.setDrawColor(230, 233, 238);
+      this.doc.setLineWidth(0.5);
+      this.doc.roundedRect(cardX, y, cardW, headerH + 28, 4, 4, 'S'); // will be “extended” by content below visually
+      return { x: cardX, w: cardW, headerH, padding };
+    };
+
+    const ensurePageSpace = (needed: number) => {
+      if (currentY + needed > pageHeight - 15) {
+        this.doc.addPage();
+        currentY = 20;
+      }
+    };
+
+    // ===== Header Bar =====
+    const logoSize = 18;
+    const headerH = 26;
+    this.doc.setFillColor(dark[0], dark[1], dark[2]);
+    this.doc.rect(0, 0, pageWidth, headerH, 'F');
+
     if (logoBase64) {
       try {
-        // Create rounded logo at high resolution
         const roundedLogo = await this.createRoundedImage(logoBase64, logoSize);
-        // Add with high quality (no compression flag = best quality)
-        this.doc.addImage(roundedLogo, 'PNG', margin, currentY, logoSize, logoSize);
-      } catch (error) {
-        console.log('Could not create rounded logo, using regular image');
+        this.doc.addImage(roundedLogo, 'PNG', margin, 5, logoSize, logoSize);
+      } catch {
         try {
-          this.doc.addImage(logoBase64, 'JPEG', margin, currentY, logoSize, logoSize);
-        } catch (e) {
-          console.log('Could not add logo image');
+          this.doc.addImage(logoBase64, 'JPEG', margin, 5, logoSize, logoSize);
+        } catch {
+          // ignore
         }
       }
     }
-    
-    // Clinic name (right of logo)
-    this.doc.setFontSize(16);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.setTextColor(23, 162, 184); // #17a2b8
-    const clinicName = 'SurgiCare Clinic Dr. Tamer Ashraf';
-    this.doc.text(clinicName, margin + logoSize + 10, currentY + 15);
-    
-    // Patient name as main title (below logo, left aligned)
-    currentY += logoSize + 15;
-    this.doc.setFontSize(22);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.setTextColor(0, 0, 0);
-    const patientName = patient.fullNameArabic || 'Unknown Patient';
-    this.doc.text(patientName, margin, currentY);
-    
-    // Patient code (below name)
-    currentY += 12;
-    this.doc.setFontSize(11);
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.setTextColor(100, 100, 100);
-    this.doc.text(`${t('patients.patientCode')}: ${patient.code}`, margin, currentY);
-    
-    // Divider line
-    currentY += 18;
-    this.doc.setDrawColor(23, 162, 184);
-    this.doc.setLineWidth(1);
-    this.doc.line(margin, currentY, pageWidth - margin, currentY);
-    currentY += 20;
 
-    // Basic Information Section - Two column layout
-    this.doc.setFontSize(14);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.setTextColor(23, 162, 184);
-    this.doc.text(t('detail.basicInfo'), margin, currentY);
-    currentY += 12;
+    text('SurgiCare Clinic – Dr. Tamer Ashraf', margin + logoSize + 8, 14, { bold: true, size: 12, color: [255, 255, 255] });
+    text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 14, { size: 9, color: [220, 225, 235], align: 'right' });
 
-    // Two column layout for better structure
-    const col1X = margin;
-    const col2X = pageWidth / 2 + 10;
-    const colWidth = (pageWidth - margin * 2 - 20) / 2;
-
-    this.doc.setFontSize(11);
-    this.doc.setFont('helvetica', 'normal');
-    
-    // Column 1
-    let col1Y = currentY;
-    const col1Items = [
-      [t('form.age'), `${patient.age} ${t('stats.years')}`],
-      [t('form.gender'), patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')],
-    ];
-
-    col1Items.forEach(([label, value]) => {
-      if (col1Y > this.doc.internal.pageSize.height - 30) {
-        this.doc.addPage();
-        col1Y = 20;
-        currentY = 20;
-      }
-      
-      this.doc.setTextColor(120, 120, 120);
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.text(label + ':', col1X, col1Y);
-      
-      this.doc.setTextColor(0, 0, 0);
-      this.doc.setFont('helvetica', 'bold');
-      this.doc.text(value, col1X + 40, col1Y);
-      this.doc.setFont('helvetica', 'normal');
-      col1Y += 10;
+    // Status badge
+    const statusStyle = this.getStatusStyle(patient.status);
+    const badgeW = 44;
+    const badgeH = 9;
+    const badgeX = pageWidth - margin - badgeW;
+    const badgeY = headerH + 6;
+    this.doc.setFillColor(statusStyle.bg[0], statusStyle.bg[1], statusStyle.bg[2]);
+    this.doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3, 3, 'F');
+    text(patient.status === 'Op' ? 'Op' : patient.status, badgeX + badgeW / 2, badgeY + 6.5, {
+      size: 9,
+      bold: true,
+      color: statusStyle.text === 'white' ? [255, 255, 255] : [0, 0, 0],
+      align: 'center'
     });
 
-    // Column 2
-    let col2Y = currentY;
-    const col2Items = [
-      [t('form.diagnosis'), patient.diagnosis],
-      [t('form.visitedDate'), new Date(patient.visitedDate).toLocaleDateString()],
-    ];
-
-    col2Items.forEach(([label, value]) => {
-      if (col2Y > this.doc.internal.pageSize.height - 30) {
-        this.doc.addPage();
-        col2Y = 20;
-        currentY = 20;
-      }
-      
-      this.doc.setTextColor(120, 120, 120);
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.text(label + ':', col2X, col2Y);
-      
-      this.doc.setTextColor(0, 0, 0);
-      this.doc.setFont('helvetica', 'bold');
-      // For diagnosis, allow text wrapping
-      const valueLines = this.doc.splitTextToSize(value, colWidth - 50);
-      valueLines.forEach((line: string, index: number) => {
-        this.doc.text(line, col2X + 40, col2Y + (index * 7));
-      });
-      this.doc.setFont('helvetica', 'normal');
-      col2Y += Math.max(10, valueLines.length * 7);
-    });
-
-    // Update currentY to the maximum of both columns
-    currentY = Math.max(col1Y, col2Y) + 5;
-
-    // Contact Information (if available) - Simplified
-    if (patient.contactInfo && (patient.contactInfo.name || patient.contactInfo.phone)) {
-      currentY += 15;
-      if (currentY > this.doc.internal.pageSize.height - 50) {
-        this.doc.addPage();
-        currentY = 20;
-      }
-
-      this.doc.setFontSize(14);
-      this.doc.setFont('helvetica', 'bold');
-      this.doc.setTextColor(23, 162, 184);
-      this.doc.text(t('detail.contactInfo'), margin, currentY);
-      currentY += 12;
-
-      this.doc.setFontSize(11);
-      this.doc.setFont('helvetica', 'normal');
-      
-      if (patient.contactInfo.phone) {
-        this.doc.setTextColor(120, 120, 120);
-        this.doc.text(t('form.phone') + ':', margin, currentY);
-        this.doc.setTextColor(0, 0, 0);
-        this.doc.setFont('helvetica', 'bold');
-        this.doc.text(patient.contactInfo.phone, margin + 50, currentY);
-        this.doc.setFont('helvetica', 'normal');
-        currentY += 10;
-      }
-      
-      if (patient.contactInfo.name) {
-        this.doc.setTextColor(120, 120, 120);
-        this.doc.text(t('form.contactName') + ':', margin, currentY);
-        this.doc.setTextColor(0, 0, 0);
-        this.doc.setFont('helvetica', 'bold');
-        this.doc.text(patient.contactInfo.name, margin + 50, currentY);
-        this.doc.setFont('helvetica', 'normal');
-        currentY += 10;
+    if (presentAtClinic) {
+      const pW = 52;
+      this.doc.setFillColor(40, 167, 69);
+      this.doc.roundedRect(margin, badgeY, pW, badgeH, 3, 3, 'F');
+      text('Present', margin + pW / 2, badgeY + 6.5, { size: 9, bold: true, color: [255, 255, 255], align: 'center' });
+      if (checkInTime) {
+        text(`Check-in: ${new Date(checkInTime).toLocaleString('en-GB')}`, margin, badgeY + 15, { size: 8, color: [100, 100, 100] });
       }
     }
 
-    // Medical Notes (if available)
+    currentY = headerH + 25;
+
+    // ===== Patient Summary Card =====
+    ensurePageSpace(60);
+    const patientName = patient.fullNameArabic || 'Unknown Patient';
+    text(patientName, pageWidth - margin, currentY, { size: 22, bold: true, color: [0, 0, 0], align: 'right' });
+    currentY += 10;
+
+    // Code pill
+    const pillText = `${t('patients.patientCode')}: ${patient.code}`;
+    this.doc.setFillColor(245, 247, 250);
+    this.doc.roundedRect(margin, currentY - 6, 70, 10, 4, 4, 'F');
+    text(pillText, margin + 5, currentY, { size: 9, color: [60, 60, 60] });
+
+    currentY += 12;
+
+    // Summary grid
+    const gridX = margin;
+    const gridW = pageWidth - margin * 2;
+    const colGap = 8;
+    const colCount = 3;
+    const colW = (gridW - colGap * (colCount - 1)) / colCount;
+    const rowH = 12;
+
+    const infoPairs: Array<[string, string]> = [
+      ['Date of Birth', safeDob ? safeDob.toLocaleDateString('en-GB') : '—'],
+      ['Age', ageDisplay],
+      [t('patients.gender'), patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')],
+      ['Weight', weight ? `${weight} kg` : '—'],
+      ['Clinic Branch', clinicBranch || '—'],
+      ['Referring Doctor', referringDoctor || '—'],
+      ['Location', (city && governorate) ? `${city}, ${governorate}` : (city || governorate || '—')],
+      [t('patients.visitedDate'), visitedDate ? visitedDate.toLocaleDateString('en-GB') : '—'],
+    ];
+
+    // subtle background block for grid
+    this.doc.setFillColor(250, 252, 253);
+    this.doc.roundedRect(margin, currentY - 6, gridW, 36, 6, 6, 'F');
+
+    let gx = gridX;
+    let gy = currentY;
+    infoPairs.slice(0, 6).forEach(([label, value], idx) => {
+      const c = idx % colCount;
+      const r = Math.floor(idx / colCount);
+      gx = gridX + c * (colW + colGap);
+      gy = currentY + r * rowH;
+      text(label, gx, gy, { size: 8, color: [120, 120, 120] });
+      text(value, gx, gy + 6, { size: 10, bold: true, color: [0, 0, 0] });
+    });
+
+    currentY += 42;
+
+    // ===== Clinical Information Card =====
+    ensurePageSpace(55);
+    const clinicalCard = drawCard('Clinical Information', currentY);
+    currentY += clinicalCard.headerH + 10;
+    const diagnosisValue = patient.diagnosis ? patient.diagnosis : 'Undiagnosed';
+    const isUndiagnosed = !patient.diagnosis;
+    text('Diagnosis', clinicalCard.x + clinicalCard.padding, currentY, { size: 8, color: [120, 120, 120] });
+    text(diagnosisValue, clinicalCard.x + clinicalCard.padding, currentY + 7, {
+      size: 11,
+      bold: true,
+      color: isUndiagnosed ? [220, 53, 69] : primary
+    });
+    currentY += 18;
+
     if (patient.notes) {
-      currentY += 15;
-      if (currentY > this.doc.internal.pageSize.height - 50) {
-        this.doc.addPage();
-        currentY = 20;
-      }
-
-      this.doc.setFontSize(14);
-      this.doc.setFont('helvetica', 'bold');
-      this.doc.setTextColor(23, 162, 184);
-      this.doc.text(t('detail.medicalNotes'), margin, currentY);
-      currentY += 12;
-
+      text('Notes', clinicalCard.x + clinicalCard.padding, currentY, { size: 8, color: [120, 120, 120] });
+      const noteLines = this.doc.splitTextToSize(patient.notes, clinicalCard.w - clinicalCard.padding * 2);
       this.doc.setFontSize(10);
       this.doc.setFont('helvetica', 'normal');
-      this.doc.setTextColor(0, 0, 0);
-      const notesLines = this.doc.splitTextToSize(patient.notes, pageWidth - (margin * 2));
-      notesLines.forEach((line: string) => {
-        if (currentY > this.doc.internal.pageSize.height - 20) {
-          this.doc.addPage();
-          currentY = 20;
-        }
-        this.doc.text(line, margin, currentY);
-        currentY += 7;
+      this.doc.setTextColor(40, 40, 40);
+      noteLines.forEach((line: string, i: number) => {
+        this.doc.text(line, clinicalCard.x + clinicalCard.padding, currentY + 7 + i * 6);
       });
+      currentY += 10 + noteLines.length * 6;
     }
 
-    // Surgeries Section
+    // Planned surgery block (if any)
+    const planned = patient.plannedSurgery;
+    if (planned && (planned.operation || planned.estimatedCost || planned.operationCategory)) {
+      ensurePageSpace(28);
+      this.doc.setFillColor(255, 249, 230);
+      this.doc.roundedRect(clinicalCard.x + clinicalCard.padding, currentY, clinicalCard.w - clinicalCard.padding * 2, 22, 4, 4, 'F');
+      text('Planned Surgery', clinicalCard.x + clinicalCard.padding + 6, currentY + 8, { size: 10, bold: true, color: [150, 90, 0] });
+      const plannedLine = [
+        planned.operationCategory ? planned.operationCategory : '',
+        planned.operation ? planned.operation : '',
+      ].filter(Boolean).join(' — ');
+      if (plannedLine) {
+        text(plannedLine, clinicalCard.x + clinicalCard.padding + 6, currentY + 15, { size: 9, color: [80, 80, 80] });
+      }
+      if (planned.estimatedCost) {
+        text(`Estimated: ${planned.estimatedCost} ${(planned.costCurrency || 'EGP')}`, clinicalCard.x + clinicalCard.w - clinicalCard.padding - 6, currentY + 15, {
+          size: 9, bold: true, color: [0, 123, 255], align: 'right'
+        });
+      }
+      currentY += 28;
+    }
+
+    currentY += 10;
+
+    // ===== Surgeries =====
     if (patient.surgeries && patient.surgeries.length > 0) {
-      currentY += 20;
-      if (currentY > this.doc.internal.pageSize.height - 50) {
-        this.doc.addPage();
-        currentY = 20;
-      }
+      ensurePageSpace(50);
+      text('Surgeries', margin, currentY, { size: 13, bold: true, color: primary });
+      currentY += 6;
 
-      this.doc.setFontSize(14);
-      this.doc.setFont('helvetica', 'bold');
-      this.doc.setTextColor(23, 162, 184);
-      this.doc.text(t('detail.surgeryDetails'), margin, currentY);
-      currentY += 12;
-
-      for (let i = 0; i < patient.surgeries.length; i++) {
-        const surgery = patient.surgeries[i];
-        
-        if (currentY > this.doc.internal.pageSize.height - 80) {
-          this.doc.addPage();
-          currentY = 20;
-        }
-
-        // Surgery header - cleaner design
-        this.doc.setFillColor(245, 250, 255);
-        this.doc.roundedRect(margin, currentY - 6, pageWidth - (margin * 2), 10, 3, 3, 'F');
-        this.doc.setFontSize(12);
-        this.doc.setFont('helvetica', 'bold');
-        this.doc.setTextColor(23, 162, 184);
-        this.doc.text(`${t('detail.surgery')} #${i + 1}: ${surgery.type || t('detail.surgery')}`, margin + 8, currentY);
-        currentY += 15;
-
-        // Surgery details - complete information
-        this.doc.setFontSize(10);
-        this.doc.setFont('helvetica', 'normal');
-        
-        // Surgery Date
-        this.doc.setTextColor(120, 120, 120);
-        this.doc.text(t('form.surgeryDate') + ':', margin + 8, currentY);
-        this.doc.setTextColor(0, 0, 0);
-        this.doc.setFont('helvetica', 'bold');
-        this.doc.text(new Date(surgery.date).toLocaleDateString(), margin + 55, currentY);
-        this.doc.setFont('helvetica', 'normal');
-        currentY += 10;
-
-        // Surgery Cost (if available)
-        if (surgery.cost) {
-          this.doc.setTextColor(120, 120, 120);
-          this.doc.text(t('detail.cost') + ':', margin + 8, currentY);
-          this.doc.setTextColor(0, 0, 0);
-          this.doc.setFont('helvetica', 'bold');
-          this.doc.text(`${surgery.cost} ${surgery.costCurrency || 'USD'}`, margin + 55, currentY);
-          this.doc.setFont('helvetica', 'normal');
-          currentY += 10;
-        }
-
-        if (surgery.surgeons && surgery.surgeons.length > 0) {
-          this.doc.setTextColor(120, 120, 120);
-          this.doc.text(t('form.surgeons') + ':', margin + 8, currentY);
-          currentY += 8;
-          surgery.surgeons.forEach((surgeon) => {
-            this.doc.setTextColor(0, 0, 0);
-            this.doc.setFont('helvetica', 'bold');
-            this.doc.text(`  • ${surgeon.name}`, margin + 12, currentY);
-            if (surgeon.specialization) {
-              this.doc.setFont('helvetica', 'normal');
-              this.doc.setTextColor(100, 100, 100);
-              this.doc.setFontSize(9);
-              this.doc.text(`    (${surgeon.specialization})`, margin + 12, currentY + 7);
-              this.doc.setFontSize(10);
-              currentY += 7;
-            }
-            currentY += 8;
-          });
-          this.doc.setFont('helvetica', 'normal');
-        }
-
-        if (surgery.notes) {
-          currentY += 6;
-          this.doc.setTextColor(120, 120, 120);
-          this.doc.text(t('form.notes') + ':', margin + 8, currentY);
-          currentY += 8;
-          this.doc.setTextColor(0, 0, 0);
-          const notesLines = this.doc.splitTextToSize(surgery.notes, pageWidth - (margin * 2) - 16);
-          notesLines.forEach((line: string) => {
-            if (currentY > this.doc.internal.pageSize.height - 20) {
-              this.doc.addPage();
-              currentY = 20;
-            }
-            this.doc.text(line, margin + 12, currentY);
-            currentY += 7;
-          });
-        }
-
-        // Surgery Image (if available)
-        if (patient.files?.surgeryImage) {
-          currentY += 10;
-          if (currentY > this.doc.internal.pageSize.height - 100) {
-            this.doc.addPage();
-            currentY = 20;
-          }
-
-          try {
-            const surgeryImageBase64 = await this.loadImageAsBase64(patient.files.surgeryImage);
-            if (surgeryImageBase64) {
-              this.doc.setFontSize(9);
-              this.doc.setTextColor(120, 120, 120);
-              this.doc.text(t('detail.surgeryImage') + ':', margin + 8, currentY);
-              currentY += 10;
-              
-              // Add image (max width 80mm, maintain aspect ratio)
-              const imgWidth = 80;
-              const imgHeight = 60; // Fixed height for consistency
-              this.doc.addImage(surgeryImageBase64, 'JPEG', margin + 8, currentY, imgWidth, imgHeight);
-              currentY += imgHeight + 15;
-            }
-          } catch (error) {
-            console.error('Error loading surgery image:', error);
-          }
-        }
-
-        currentY += 12;
-      }
-    }
-
-    // Follow-ups Section
-    if (patient.followUps && patient.followUps.length > 0) {
-      currentY += 15;
-      if (currentY > this.doc.internal.pageSize.height - 50) {
-        this.doc.addPage();
-        currentY = 20;
-      }
-
-      this.doc.setFontSize(14);
-      this.doc.setFont('helvetica', 'bold');
-      this.doc.setTextColor(23, 162, 184);
-      this.doc.text(t('form.followUps'), margin, currentY);
-      currentY += 12;
-
-      patient.followUps.forEach((followUp) => {
-        if (currentY > this.doc.internal.pageSize.height - 40) {
-          this.doc.addPage();
-          currentY = 20;
-        }
-
-        this.doc.setFontSize(10);
-        this.doc.setFont('helvetica', 'normal');
-        this.doc.setFillColor(248, 250, 252);
-        this.doc.roundedRect(margin, currentY - 6, pageWidth - (margin * 2), 22, 3, 3, 'F');
-        
-        this.doc.setFont('helvetica', 'bold');
-        this.doc.setTextColor(23, 162, 184);
-        this.doc.text(`${t('detail.followUp')} #${followUp.number}`, margin + 8, currentY);
-        this.doc.setFont('helvetica', 'normal');
-        this.doc.setTextColor(120, 120, 120);
-        this.doc.setFontSize(9);
-        this.doc.text(new Date(followUp.date).toLocaleDateString(), pageWidth - margin - 30, currentY);
-        
-        if (followUp.notes) {
-          currentY += 10;
-          this.doc.setTextColor(0, 0, 0);
-          this.doc.setFontSize(9);
-          const notesLines = this.doc.splitTextToSize(followUp.notes, pageWidth - (margin * 2) - 16);
-          notesLines.forEach((line: string) => {
-            this.doc.text(line, margin + 8, currentY);
-            currentY += 6;
-          });
-        }
-        
-        currentY += 10;
+      const surgeriesTableBody = patient.surgeries.map((s, idx) => {
+        const surgeons = (s.surgeons || []).map(x => x.name).filter(Boolean).join(', ');
+        const notesShort = s.notes ? (s.notes.length > 60 ? s.notes.slice(0, 57) + '…' : s.notes) : '';
+        return [
+          String(idx + 1),
+          s.date ? new Date(s.date).toLocaleDateString('en-GB') : '',
+          (s.operation || s.type || '').toString(),
+          s.cost ? `${s.cost} ${(s.costCurrency || 'EGP')}` : '',
+          surgeons,
+          notesShort
+        ];
       });
+
+      autoTable(this.doc, {
+        startY: currentY + 4,
+        head: [['#', 'Date', 'Operation', 'Cost', 'Surgeons', 'Notes']],
+        body: surgeriesTableBody,
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: margin, right: margin }
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      currentY = ((this.doc as any).lastAutoTable?.finalY || currentY) + 8;
+
+      // Thumbnails per-surgery (first 8 photos)
+      for (let i = 0; i < patient.surgeries.length; i++) {
+        const surgery: any = patient.surgeries[i] as any;
+        const photos: string[] = Array.isArray(surgery.photos) ? surgery.photos : [];
+        if (!photos.length) continue;
+        ensurePageSpace(32);
+        text(`Surgery #${i + 1} Photos`, margin, currentY, { size: 10, bold: true, color: [80, 80, 80] });
+        currentY += 6;
+
+        const thumbSize = 18;
+        const gap = 4;
+        const maxPerRow = Math.floor((pageWidth - margin * 2) / (thumbSize + gap));
+        const show = photos.slice(0, 8);
+        let x = margin;
+        let y = currentY;
+        for (let p = 0; p < show.length; p++) {
+          const dataUrl = await this.loadImageAsBase64(show[p]);
+          if (dataUrl) {
+            const format = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+            this.doc.setDrawColor(230, 233, 238);
+            this.doc.roundedRect(x, y, thumbSize, thumbSize, 2, 2, 'S');
+            try {
+              this.doc.addImage(dataUrl, format as any, x, y, thumbSize, thumbSize);
+            } catch {
+              // ignore
+            }
+          }
+          x += thumbSize + gap;
+          if ((p + 1) % maxPerRow === 0) {
+            x = margin;
+            y += thumbSize + gap;
+          }
+        }
+        currentY = y + thumbSize + 8;
+        if (photos.length > show.length) {
+          text(`+${photos.length - show.length} more`, pageWidth - margin, currentY - 2, { size: 8, color: [120, 120, 120], align: 'right' });
+        }
+      }
     }
 
-    // Footer
-    const pageHeight = this.doc.internal.pageSize.height;
-    this.doc.setFontSize(8);
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.setTextColor(150, 150, 150);
-    this.doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, pageHeight - 10);
-    this.doc.text('Hospital Management System - Confidential', pageWidth - margin - 60, pageHeight - 10, { align: 'right' });
+    // ===== Follow-ups =====
+    if (patient.followUps && patient.followUps.length > 0) {
+      ensurePageSpace(45);
+      text('Follow-ups', margin, currentY, { size: 13, bold: true, color: primary });
+      currentY += 10;
+
+      const followUpsTableBody = patient.followUps.map((fu) => {
+        const notesShort = fu.notes ? (fu.notes.length > 90 ? fu.notes.slice(0, 87) + '…' : fu.notes) : '';
+        return [
+          String(fu.number),
+          fu.date ? new Date(fu.date).toLocaleDateString('en-GB') : '',
+          notesShort
+        ];
+      });
+
+      autoTable(this.doc, {
+        startY: currentY,
+        head: [['#', 'Date', 'Notes']],
+        body: followUpsTableBody,
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: margin, right: margin }
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      currentY = ((this.doc as any).lastAutoTable?.finalY || currentY) + 8;
+
+      // Follow-up photos thumbnails (first 12 total)
+      const allFollowPhotos = patient.followUps.flatMap((fu) => (fu.photos || []));
+      if (allFollowPhotos.length) {
+        ensurePageSpace(34);
+        text('Follow-up Photos', margin, currentY, { size: 10, bold: true, color: [80, 80, 80] });
+        currentY += 6;
+
+        const thumbSize = 16;
+        const gap = 4;
+        const maxPerRow = Math.floor((pageWidth - margin * 2) / (thumbSize + gap));
+        const show = allFollowPhotos.slice(0, 12);
+        let x = margin;
+        let y = currentY;
+        for (let p = 0; p < show.length; p++) {
+          const dataUrl = await this.loadImageAsBase64(show[p]);
+          if (dataUrl) {
+            const format = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+            this.doc.setDrawColor(230, 233, 238);
+            this.doc.roundedRect(x, y, thumbSize, thumbSize, 2, 2, 'S');
+            try {
+              this.doc.addImage(dataUrl, format as any, x, y, thumbSize, thumbSize);
+            } catch {
+              // ignore
+            }
+          }
+          x += thumbSize + gap;
+          if ((p + 1) % maxPerRow === 0) {
+            x = margin;
+            y += thumbSize + gap;
+          }
+        }
+        currentY = y + thumbSize + 10;
+        if (allFollowPhotos.length > show.length) {
+          text(`+${allFollowPhotos.length - show.length} more`, pageWidth - margin, currentY - 4, { size: 8, color: [120, 120, 120], align: 'right' });
+        }
+      }
+    }
+
+    // ===== Files / Images =====
+    if (patient.files && (patient.files.personalImage || patient.files.surgeryImage || (patient.files.lab?.length || 0) > 0 || (patient.files.radiology?.length || 0) > 0)) {
+      ensurePageSpace(55);
+      text('Files & Images', margin, currentY, { size: 13, bold: true, color: primary });
+      currentY += 10;
+
+      const thumbSize = 28;
+      const gap = 8;
+      let x = margin;
+      let y = currentY;
+
+      const imageSlots: Array<{ label: string; url?: string }> = [
+        { label: 'Personal Image', url: patient.files.personalImage },
+        { label: 'Patient Sheet Image', url: patient.files.surgeryImage },
+      ];
+
+      for (const slot of imageSlots) {
+        if (!slot.url) continue;
+        ensurePageSpace(thumbSize + 16);
+        const dataUrl = await this.loadImageAsBase64(slot.url);
+        if (dataUrl) {
+          const format = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+          this.doc.setDrawColor(230, 233, 238);
+          this.doc.roundedRect(x, y, thumbSize, thumbSize, 3, 3, 'S');
+          try {
+            this.doc.addImage(dataUrl, format as any, x, y, thumbSize, thumbSize);
+          } catch {
+            // ignore
+          }
+          text(slot.label, x, y + thumbSize + 6, { size: 8, color: [120, 120, 120] });
+          x += thumbSize + gap;
+        }
+      }
+
+      currentY = y + thumbSize + 18;
+      const labCount = patient.files.lab?.length || 0;
+      const radCount = patient.files.radiology?.length || 0;
+      text(`Lab files: ${labCount}`, margin, currentY, { size: 9, color: [80, 80, 80] });
+      text(`X-ray/Radiology files: ${radCount}`, margin + 70, currentY, { size: 9, color: [80, 80, 80] });
+      currentY += 12;
+    }
+
+    // Footer (page number + confidential)
+    const totalPages = this.doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      this.doc.setPage(p);
+      this.doc.setFontSize(8);
+      this.doc.setFont('helvetica', 'normal');
+      this.doc.setTextColor(150, 150, 150);
+      this.doc.text(`SurgiCare Clinic — Confidential`, margin, pageHeight - 10);
+      this.doc.text(`Page ${p} / ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+    }
   }
 }
 
@@ -705,7 +817,13 @@ export const generatePDFReport = {
   singlePatient: async (patient: Patient, t: (key: string) => string) => {
     const generator = new PDFReportGenerator();
     await generator.generateSinglePatientPDF(patient, t);
-    const filename = `patient-${patient.code}-${new Date().toISOString().split('T')[0]}.pdf`;
+    const datePart = new Date().toISOString().split('T')[0];
+    // include Arabic name in filename (sanitized)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const namePart = generator['sanitizeFilenamePart']((patient.fullNameArabic || '').toString());
+    const filename = namePart
+      ? `patient-${patient.code}-${namePart}-${datePart}.pdf`
+      : `patient-${patient.code}-${datePart}.pdf`;
     generator.download(filename);
   },
 };
