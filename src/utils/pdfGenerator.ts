@@ -1,10 +1,14 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Patient, DashboardStats } from '../types';
+import bidiFactory from 'bidi-js';
+import * as Reshaper from 'arabic-persian-reshaper';
 
 export class PDFReportGenerator {
   private doc: jsPDF;
   private static arabicFontsLoaded = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private static bidi: any | null = null;
 
   constructor() {
     this.doc = new jsPDF();
@@ -12,6 +16,27 @@ export class PDFReportGenerator {
 
   private isArabicText(text: string): boolean {
     return /[\u0600-\u06FF]/.test(text);
+  }
+
+  private shapeArabic(text: string): string {
+    // Convert Arabic letters to presentation forms (connected glyphs) + reorder for visual display.
+    // This fixes "disconnected letters" and wrong RTL ordering in many PDF renderers.
+    try {
+      if (!this.isArabicText(text)) return text;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const shaper: any = (Reshaper as any).ArabicShaper;
+      const shaped = shaper?.convertArabic ? shaper.convertArabic(text) : text;
+      if (!PDFReportGenerator.bidi) {
+        // bidi-js default export is a factory function
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        PDFReportGenerator.bidi = (bidiFactory as any)();
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bidi: any = PDFReportGenerator.bidi;
+      return typeof bidi?.getReorderedString === 'function' ? bidi.getReorderedString(shaped) : shaped;
+    } catch {
+      return text;
+    }
   }
 
   private sanitizeFilenamePart(value: string): string {
@@ -141,8 +166,8 @@ export class PDFReportGenerator {
   private async ensureArabicFontsLoaded(): Promise<void> {
     if (PDFReportGenerator.arabicFontsLoaded) return;
 
-    const regularDataUrl = await this.loadAssetAsBase64('/fonts/Amiri-Regular.ttf');
-    const boldDataUrl = await this.loadAssetAsBase64('/fonts/Amiri-Bold.ttf');
+    const regularDataUrl = await this.loadAssetAsBase64('/fonts/Cairo-Regular.ttf');
+    const boldDataUrl = await this.loadAssetAsBase64('/fonts/Cairo-Bold.ttf');
 
     const regularBase64 = regularDataUrl.split(',')[1] || '';
     const boldBase64 = boldDataUrl.split(',')[1] || '';
@@ -155,10 +180,10 @@ export class PDFReportGenerator {
     // Register font with jsPDF
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const docAny = this.doc as any;
-    docAny.addFileToVFS('Amiri-Regular.ttf', regularBase64);
-    docAny.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-    docAny.addFileToVFS('Amiri-Bold.ttf', boldBase64);
-    docAny.addFont('Amiri-Bold.ttf', 'Amiri', 'bold');
+    docAny.addFileToVFS('Cairo-Regular.ttf', regularBase64);
+    docAny.addFont('Cairo-Regular.ttf', 'Cairo', 'normal');
+    docAny.addFileToVFS('Cairo-Bold.ttf', boldBase64);
+    docAny.addFont('Cairo-Bold.ttf', 'Cairo', 'bold');
 
     PDFReportGenerator.arabicFontsLoaded = true;
   }
@@ -389,8 +414,12 @@ export class PDFReportGenerator {
       }
     }
 
-    const primary = [23, 162, 184] as [number, number, number]; // teal
-    const dark = [20, 33, 61] as [number, number, number]; // navy
+    // Match website palette (App.css)
+    const primaryBlue = [23, 162, 184] as [number, number, number]; // --primary-blue (#17a2b8)
+    // const primaryDark = [19, 132, 150] as [number, number, number]; // --primary-dark (#138496)
+    const dark = [52, 58, 64] as [number, number, number]; // --dark (#343a40)
+    const light = [248, 249, 250] as [number, number, number]; // --light (#f8f9fa)
+    const lightGray = [233, 236, 239] as [number, number, number]; // --light-gray (#e9ecef)
 
     const safeDob = (patient as any).dateOfBirth ? new Date((patient as any).dateOfBirth) : null;
     const visitedDate = patient.visitedDate ? new Date(patient.visitedDate) : ((patient as any).admissionDate ? new Date((patient as any).admissionDate) : null);
@@ -418,14 +447,15 @@ export class PDFReportGenerator {
       return patient.age ? `${patient.age}y` : '—';
     })();
 
-    const text = (value: string, x: number, y: number, opts?: { bold?: boolean; size?: number; color?: [number, number, number]; align?: 'left' | 'right' | 'center'; rtl?: boolean }) => {
+    const text = (valueRaw: string, x: number, y: number, opts?: { bold?: boolean; size?: number; color?: [number, number, number]; align?: 'left' | 'right' | 'center'; rtl?: boolean }) => {
       const size = opts?.size ?? 10;
       const align = opts?.align ?? 'left';
       const color = opts?.color ?? [0, 0, 0];
+      const value = (opts?.rtl ?? this.isArabicText(valueRaw)) ? this.shapeArabic(valueRaw) : valueRaw;
       this.doc.setFontSize(size);
-      const isArabic = opts?.rtl ?? this.isArabicText(value);
-      const canUseAmiri = PDFReportGenerator.arabicFontsLoaded && isArabic;
-      this.doc.setFont(canUseAmiri ? 'Amiri' : 'helvetica', opts?.bold ? 'bold' : 'normal');
+      const isArabic = opts?.rtl ?? this.isArabicText(valueRaw);
+      const canUseCairo = PDFReportGenerator.arabicFontsLoaded && isArabic;
+      this.doc.setFont(canUseCairo ? 'Cairo' : 'helvetica', opts?.bold ? 'bold' : 'normal');
       this.doc.setTextColor(color[0], color[1], color[2]);
       this.doc.text(value, x, y, { align, isInputRtl: isArabic });
     };
@@ -435,14 +465,21 @@ export class PDFReportGenerator {
       const cardW = pageWidth - margin * 2;
       const headerH = 12;
       const padding = 10;
-      // card header background
-      this.doc.setFillColor(primary[0], primary[1], primary[2]);
+
+      // Card container (white, bordered like .card)
+      this.doc.setFillColor(255, 255, 255);
+      this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      this.doc.setLineWidth(0.6);
+      this.doc.roundedRect(cardX, y, cardW, headerH + 30, 4, 4, 'FD');
+
+      // Card header strip (light tint like the UI gradients)
+      this.doc.setFillColor(235, 248, 250); // ~ rgba(primary, 0.1)
       this.doc.roundedRect(cardX, y, cardW, headerH, 4, 4, 'F');
-      text(title, cardX + 8, y + 8.5, { bold: true, size: 11, color: [255, 255, 255] });
-      // card body outline
-      this.doc.setDrawColor(230, 233, 238);
-      this.doc.setLineWidth(0.5);
-      this.doc.roundedRect(cardX, y, cardW, headerH + 28, 4, 4, 'S'); // will be “extended” by content below visually
+      // underline header
+      this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      this.doc.line(cardX, y + headerH, cardX + cardW, y + headerH);
+
+      text(title, cardX + 8, y + 8.5, { bold: true, size: 11, color: primaryBlue });
       return { x: cardX, w: cardW, headerH, padding };
     };
 
@@ -453,12 +490,12 @@ export class PDFReportGenerator {
       }
     };
 
-    // ===== Header Bar =====
+    // ===== Header Bar (match navbar: primary blue) =====
     const logoSize = 18;
     const headerH = 26;
-    this.doc.setFillColor(dark[0], dark[1], dark[2]);
+    this.doc.setFillColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
     this.doc.rect(0, 0, pageWidth, headerH, 'F');
-
+    
     if (logoBase64) {
       try {
         const roundedLogo = await this.createRoundedImage(logoBase64, logoSize);
@@ -472,29 +509,47 @@ export class PDFReportGenerator {
       }
     }
 
-    text('SurgiCare Clinic – Dr. Tamer Ashraf', margin + logoSize + 8, 14, { bold: true, size: 12, color: [255, 255, 255] });
-    text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 14, { size: 9, color: [220, 225, 235], align: 'right' });
+    text('SurgiCare', margin + logoSize + 8, 14, { bold: true, size: 14, color: [255, 255, 255] });
+    text('Patient Report', margin + logoSize + 8, 21, { size: 9, color: [235, 250, 252] });
+    text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 14, { size: 9, color: [235, 250, 252], align: 'right' });
 
     // Status badge
-    const statusStyle = this.getStatusStyle(patient.status);
+    // const statusStyle = this.getStatusStyle(patient.status);
     const badgeW = 44;
     const badgeH = 9;
     const badgeX = pageWidth - margin - badgeW;
     const badgeY = headerH + 6;
-    this.doc.setFillColor(statusStyle.bg[0], statusStyle.bg[1], statusStyle.bg[2]);
-    this.doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3, 3, 'F');
+    // Website-style badge: light background + colored text
+    const badgeBg = patient.status === 'Diagnosed'
+      ? [219, 234, 254] // #dbeafe
+      : patient.status === 'Pre-op'
+        ? [254, 243, 199] // #fef3c7
+        : patient.status === 'Op'
+          ? [254, 226, 226] // #fee2e2
+          : [220, 252, 231]; // #dcfce7
+    const badgeText = patient.status === 'Diagnosed'
+      ? [30, 64, 175] // #1e40af
+      : patient.status === 'Pre-op'
+        ? [146, 64, 14] // #92400e
+        : patient.status === 'Op'
+          ? [220, 38, 38] // #dc2626
+          : [22, 101, 52]; // #166534
+    this.doc.setFillColor(badgeBg[0], badgeBg[1], badgeBg[2]);
+    this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    this.doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 4, 4, 'FD');
     text(patient.status === 'Op' ? 'Op' : patient.status, badgeX + badgeW / 2, badgeY + 6.5, {
       size: 9,
       bold: true,
-      color: statusStyle.text === 'white' ? [255, 255, 255] : [0, 0, 0],
+      color: badgeText as [number, number, number],
       align: 'center'
     });
 
     if (presentAtClinic) {
       const pW = 52;
-      this.doc.setFillColor(40, 167, 69);
-      this.doc.roundedRect(margin, badgeY, pW, badgeH, 3, 3, 'F');
-      text('Present', margin + pW / 2, badgeY + 6.5, { size: 9, bold: true, color: [255, 255, 255], align: 'center' });
+      this.doc.setFillColor(220, 252, 231); // light green
+      this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      this.doc.roundedRect(margin, badgeY, pW, badgeH, 4, 4, 'FD');
+      text('Present', margin + pW / 2, badgeY + 6.5, { size: 9, bold: true, color: [22, 101, 52], align: 'center' });
       if (checkInTime) {
         text(`Check-in: ${new Date(checkInTime).toLocaleString('en-GB')}`, margin, badgeY + 15, { size: 8, color: [100, 100, 100] });
       }
@@ -505,14 +560,15 @@ export class PDFReportGenerator {
     // ===== Patient Summary Card =====
     ensurePageSpace(60);
     const patientName = patient.fullNameArabic || 'Unknown Patient';
-    text(patientName, pageWidth - margin, currentY, { size: 22, bold: true, color: [0, 0, 0], align: 'right' });
+    text(patientName, pageWidth - margin, currentY, { size: 22, bold: true, color: primaryBlue, align: 'right', rtl: true });
     currentY += 10;
 
     // Code pill
     const pillText = `${t('patients.patientCode')}: ${patient.code}`;
-    this.doc.setFillColor(245, 247, 250);
-    this.doc.roundedRect(margin, currentY - 6, 70, 10, 4, 4, 'F');
-    text(pillText, margin + 5, currentY, { size: 9, color: [60, 60, 60] });
+    this.doc.setFillColor(255, 255, 255);
+    this.doc.setDrawColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
+    this.doc.roundedRect(margin, currentY - 6, 78, 10, 5, 5, 'S');
+    text(pillText, margin + 5, currentY, { size: 9, color: dark });
 
     currentY += 12;
 
@@ -535,9 +591,10 @@ export class PDFReportGenerator {
       [t('patients.visitedDate'), visitedDate ? visitedDate.toLocaleDateString('en-GB') : '—'],
     ];
 
-    // subtle background block for grid
-    this.doc.setFillColor(250, 252, 253);
-    this.doc.roundedRect(margin, currentY - 6, gridW, 36, 6, 6, 'F');
+    // subtle background block for grid like cards
+    this.doc.setFillColor(light[0], light[1], light[2]);
+    this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    this.doc.roundedRect(margin, currentY - 6, gridW, 36, 6, 6, 'FD');
 
     let gx = gridX;
     let gy = currentY;
@@ -562,7 +619,7 @@ export class PDFReportGenerator {
     text(diagnosisValue, clinicalCard.x + clinicalCard.padding, currentY + 7, {
       size: 11,
       bold: true,
-      color: isUndiagnosed ? [220, 53, 69] : primary
+      color: isUndiagnosed ? [220, 53, 69] : primaryBlue
     });
     currentY += 18;
 
@@ -582,9 +639,10 @@ export class PDFReportGenerator {
     const planned = patient.plannedSurgery;
     if (planned && (planned.operation || planned.estimatedCost || planned.operationCategory)) {
       ensurePageSpace(28);
-      this.doc.setFillColor(255, 249, 230);
-      this.doc.roundedRect(clinicalCard.x + clinicalCard.padding, currentY, clinicalCard.w - clinicalCard.padding * 2, 22, 4, 4, 'F');
-      text('Planned Surgery', clinicalCard.x + clinicalCard.padding + 6, currentY + 8, { size: 10, bold: true, color: [150, 90, 0] });
+      this.doc.setFillColor(255, 251, 235); // similar to warning light
+      this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      this.doc.roundedRect(clinicalCard.x + clinicalCard.padding, currentY, clinicalCard.w - clinicalCard.padding * 2, 22, 4, 4, 'FD');
+      text('Planned Surgery', clinicalCard.x + clinicalCard.padding + 6, currentY + 8, { size: 10, bold: true, color: [146, 64, 14] });
       const plannedLine = [
         planned.operationCategory ? planned.operationCategory : '',
         planned.operation ? planned.operation : '',
@@ -594,7 +652,7 @@ export class PDFReportGenerator {
       }
       if (planned.estimatedCost) {
         text(`Estimated: ${planned.estimatedCost} ${(planned.costCurrency || 'EGP')}`, clinicalCard.x + clinicalCard.w - clinicalCard.padding - 6, currentY + 15, {
-          size: 9, bold: true, color: [0, 123, 255], align: 'right'
+          size: 9, bold: true, color: primaryBlue, align: 'right'
         });
       }
       currentY += 28;
@@ -605,7 +663,7 @@ export class PDFReportGenerator {
     // ===== Surgeries =====
     if (patient.surgeries && patient.surgeries.length > 0) {
       ensurePageSpace(50);
-      text('Surgeries', margin, currentY, { size: 13, bold: true, color: primary });
+      text('Surgeries', margin, currentY, { size: 13, bold: true, color: primaryBlue });
       currentY += 6;
 
       const surgeriesTableBody = patient.surgeries.map((s, idx) => {
@@ -626,8 +684,8 @@ export class PDFReportGenerator {
         head: [['#', 'Date', 'Operation', 'Cost', 'Surgeons', 'Notes']],
         body: surgeriesTableBody,
         styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-        headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
+        headStyles: { fillColor: primaryBlue, textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: light },
         margin: { left: margin, right: margin }
       });
 
@@ -677,9 +735,9 @@ export class PDFReportGenerator {
     // ===== Follow-ups =====
     if (patient.followUps && patient.followUps.length > 0) {
       ensurePageSpace(45);
-      text('Follow-ups', margin, currentY, { size: 13, bold: true, color: primary });
-      currentY += 10;
-
+      text('Follow-ups', margin, currentY, { size: 13, bold: true, color: primaryBlue });
+              currentY += 10;
+              
       const followUpsTableBody = patient.followUps.map((fu) => {
         const notesShort = fu.notes ? (fu.notes.length > 90 ? fu.notes.slice(0, 87) + '…' : fu.notes) : '';
         return [
@@ -694,8 +752,8 @@ export class PDFReportGenerator {
         head: [['#', 'Date', 'Notes']],
         body: followUpsTableBody,
         styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-        headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
+        headStyles: { fillColor: primaryBlue, textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: light },
         margin: { left: margin, right: margin }
       });
 
@@ -743,7 +801,7 @@ export class PDFReportGenerator {
     // ===== Files / Images =====
     if (patient.files && (patient.files.personalImage || patient.files.surgeryImage || (patient.files.lab?.length || 0) > 0 || (patient.files.radiology?.length || 0) > 0)) {
       ensurePageSpace(55);
-      text('Files & Images', margin, currentY, { size: 13, bold: true, color: primary });
+      text('Files & Images', margin, currentY, { size: 13, bold: true, color: primaryBlue });
       currentY += 10;
 
       const thumbSize = 28;
@@ -786,9 +844,9 @@ export class PDFReportGenerator {
     const totalPages = this.doc.getNumberOfPages();
     for (let p = 1; p <= totalPages; p++) {
       this.doc.setPage(p);
-      this.doc.setFontSize(8);
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.setTextColor(150, 150, 150);
+    this.doc.setFontSize(8);
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setTextColor(150, 150, 150);
       this.doc.text(`SurgiCare Clinic — Confidential`, margin, pageHeight - 10);
       this.doc.text(`Page ${p} / ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
     }
