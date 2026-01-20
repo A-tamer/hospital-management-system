@@ -7,6 +7,8 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
+  setDoc,
   onSnapshot,
   getDocs,
   query,
@@ -132,13 +134,21 @@ export const FirebaseService = {
   },
 
   subscribeToPatients(callback: (patients: Patient[]) => void): Unsubscribe {
-    const unsubscribe = onSnapshot(collection(db, 'patients'), (snapshot) => {
-      const patients = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Patient[];
-      callback(patients);
-    });
+    const unsubscribe = onSnapshot(
+      collection(db, 'patients'),
+      (snapshot) => {
+        const patients = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Patient[];
+        callback(patients);
+      },
+      (error) => {
+        console.error('Error in patients snapshot listener:', error);
+        // Return empty array on error so app doesn't break
+        callback([]);
+      }
+    );
     return unsubscribe;
   },
 
@@ -166,6 +176,21 @@ export const FirebaseService = {
     return docRef.id;
   },
 
+  async createUserWithId(userId: string, user: Omit<User, 'id'>): Promise<void> {
+    const safeUser = {
+      name: user.name || 'Unnamed User',
+      email: user.email || '',
+      password: '', // No password stored in Firestore with Firebase Auth
+      role: user.role || 'user',
+      canViewFinancial: user.canViewFinancial || false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const userRef = doc(db, 'users', userId);
+    await setDoc(userRef, safeUser);
+  },
+
   async updateUser(id: string, updatedData: Partial<User>) {
     const ref = doc(db, 'users', id);
     const cleanData = Object.fromEntries(
@@ -184,13 +209,21 @@ export const FirebaseService = {
   },
 
   subscribeToUsers(callback: (users: User[]) => void): Unsubscribe {
-    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const users = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as User[];
-      callback(users);
-    });
+    const unsubscribe = onSnapshot(
+      collection(db, 'users'),
+      (snapshot) => {
+        const users = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as User[];
+        callback(users);
+      },
+      (error) => {
+        console.error('Error in users snapshot listener:', error);
+        // Return empty array on error so app doesn't break
+        callback([]);
+      }
+    );
     return unsubscribe;
   },
 
@@ -202,5 +235,20 @@ export const FirebaseService = {
       return { id: docSnap.id, ...docSnap.data() } as User;
     }
     return null;
+  },
+
+  async getUserById(userId: string): Promise<User | null> {
+    try {
+      const docRef = doc(db, 'users', userId);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as User;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching user by ID:', error);
+      return null;
+    }
   },
 };

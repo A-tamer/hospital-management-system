@@ -4,6 +4,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
 import { getStorage } from "firebase/storage";
+import { getAuth } from "firebase/auth";
 
 // Your web app's Firebase configuration
 // ⚠️ Make sure these values exactly match the config from Firebase Console → Project settings → Web app
@@ -28,10 +29,13 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firestore
 const db = getFirestore(app);
 
+// Initialize Authentication
+const auth = getAuth(app);
+
 // (Optional) Initialize Analytics — works only in browsers
 const analytics = getAnalytics(app);
 
 // Initialize Storage
 const storage = getStorage(app);
 
-export { app, db, analytics, storage };
+export { app, db, auth, analytics, storage };

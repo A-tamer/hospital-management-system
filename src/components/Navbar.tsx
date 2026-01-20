@@ -10,17 +10,26 @@ import {
 } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { useLanguage } from '../context/LanguageContext';
-import { clearSession } from '../utils/sessionManager';
+import { signOut } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 const Navbar: React.FC = () => {
   const location = useLocation();
   const { state, dispatch } = usePatientContext();
   const { language, setLanguage, t, dir } = useLanguage();
 
-  const handleLogout = () => {
-    dispatch({ type: 'SET_CURRENT_USER', payload: null });
-    clearSession();
-    window.location.href = '/login';
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // Firebase auth state listener will automatically update context
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Error signing out:', error);
+      // Fallback: clear local state anyway
+      dispatch({ type: 'SET_CURRENT_USER', payload: null });
+      localStorage.removeItem('currentUser');
+      window.location.href = '/login';
+    }
   };
 
   const toggleLanguage = () => {

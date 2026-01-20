@@ -39,6 +39,10 @@ export class PDFReportGenerator {
     }
   }
 
+  private formatDateLong(date: Date): string {
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
+
   private sanitizeFilenamePart(value: string): string {
     return value
       .trim()
@@ -398,6 +402,7 @@ export class PDFReportGenerator {
     const pageHeight = this.doc.internal.pageSize.height;
     const margin = 20;
     let currentY = 25;
+    const generatedAt = new Date();
 
     // Load logo - try multiple possible paths
     let logoBase64 = '';
@@ -414,6 +419,28 @@ export class PDFReportGenerator {
       }
     }
 
+    // Load provider signature (static clinic signature)
+    // Provide this file in your project: `public/imgs/signature.png`
+    let signatureBase64 = '';
+    try {
+      const sigResp = await fetch('/imgs/signature.png');
+      if (sigResp.ok) {
+        signatureBase64 = await this.loadImageAsBase64('/imgs/signature.png');
+      }
+    } catch {
+      // ignore
+    }
+
+    // Load patient photo (optional)
+    let patientPhotoBase64 = '';
+    if (patient.files?.personalImage) {
+      try {
+        patientPhotoBase64 = await this.loadImageAsBase64(patient.files.personalImage);
+      } catch {
+        patientPhotoBase64 = '';
+      }
+    }
+
     // Match website palette (App.css)
     const primaryBlue = [23, 162, 184] as [number, number, number]; // --primary-blue (#17a2b8)
     // const primaryDark = [19, 132, 150] as [number, number, number]; // --primary-dark (#138496)
@@ -422,12 +449,8 @@ export class PDFReportGenerator {
     const lightGray = [233, 236, 239] as [number, number, number]; // --light-gray (#e9ecef)
 
     const safeDob = (patient as any).dateOfBirth ? new Date((patient as any).dateOfBirth) : null;
-    const visitedDate = patient.visitedDate ? new Date(patient.visitedDate) : ((patient as any).admissionDate ? new Date((patient as any).admissionDate) : null);
-    const governorate = (patient as any).governorate as string | undefined;
-    const city = (patient as any).city as string | undefined;
     const weight = (patient as any).weight as number | undefined;
     const clinicBranch = (patient as any).clinicBranch as string | undefined;
-    const referringDoctor = (patient as any).referringDoctor as string | undefined;
     const presentAtClinic = (patient as any).presentAtClinic as boolean | undefined;
     const checkInTime = (patient as any).clinicCheckInTime as string | undefined;
 
@@ -511,7 +534,7 @@ export class PDFReportGenerator {
 
     text('SurgiCare', margin + logoSize + 8, 14, { bold: true, size: 14, color: [255, 255, 255] });
     text('Patient Report', margin + logoSize + 8, 21, { size: 9, color: [235, 250, 252] });
-    text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 14, { size: 9, color: [235, 250, 252], align: 'right' });
+    text(`Generated: ${this.formatDateLong(generatedAt)}`, pageWidth - margin, 14, { size: 9, color: [235, 250, 252], align: 'right' });
 
     // Status badge
     // const statusStyle = this.getStatusStyle(patient.status);
@@ -555,59 +578,71 @@ export class PDFReportGenerator {
       }
     }
 
-    currentY = headerH + 25;
+    currentY = headerH + 16;
 
-    // ===== Patient Summary Card =====
-    ensurePageSpace(60);
-    const patientName = patient.fullNameArabic || 'Unknown Patient';
-    text(patientName, pageWidth - margin, currentY, { size: 22, bold: true, color: primaryBlue, align: 'right', rtl: true });
-    currentY += 10;
+    // ===== Patient Hero Card (Logo + Patient Photo + Arabic Name) =====
+    ensurePageSpace(70);
 
-    // Code pill
-    const pillText = `${t('patients.patientCode')}: ${patient.code}`;
+    const heroX = margin;
+    const heroW = pageWidth - margin * 2;
+    const heroH = 52;
+
+    // Card container
     this.doc.setFillColor(255, 255, 255);
-    this.doc.setDrawColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-    this.doc.roundedRect(margin, currentY - 6, 78, 10, 5, 5, 'S');
-    text(pillText, margin + 5, currentY, { size: 9, color: dark });
-
-    currentY += 12;
-
-    // Summary grid
-    const gridX = margin;
-    const gridW = pageWidth - margin * 2;
-    const colGap = 8;
-    const colCount = 3;
-    const colW = (gridW - colGap * (colCount - 1)) / colCount;
-    const rowH = 12;
-
-    const infoPairs: Array<[string, string]> = [
-      ['Date of Birth', safeDob ? safeDob.toLocaleDateString('en-GB') : '—'],
-      ['Age', ageDisplay],
-      [t('patients.gender'), patient.gender === 'Male' ? t('gender.male') : patient.gender === 'Female' ? t('gender.female') : t('gender.other')],
-      ['Weight', weight ? `${weight} kg` : '—'],
-      ['Clinic Branch', clinicBranch || '—'],
-      ['Referring Doctor', referringDoctor || '—'],
-      ['Location', (city && governorate) ? `${city}, ${governorate}` : (city || governorate || '—')],
-      [t('patients.visitedDate'), visitedDate ? visitedDate.toLocaleDateString('en-GB') : '—'],
-    ];
-
-    // subtle background block for grid like cards
-    this.doc.setFillColor(light[0], light[1], light[2]);
     this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-    this.doc.roundedRect(margin, currentY - 6, gridW, 36, 6, 6, 'FD');
+    this.doc.setLineWidth(0.6);
+    this.doc.roundedRect(heroX, currentY, heroW, heroH, 8, 8, 'FD');
+    // subtle header tint inside card (like the site gradients)
+    this.doc.setFillColor(235, 248, 250);
+    this.doc.roundedRect(heroX, currentY, heroW, 16, 8, 8, 'F');
 
-    let gx = gridX;
-    let gy = currentY;
-    infoPairs.slice(0, 6).forEach(([label, value], idx) => {
-      const c = idx % colCount;
-      const r = Math.floor(idx / colCount);
-      gx = gridX + c * (colW + colGap);
-      gy = currentY + r * rowH;
-      text(label, gx, gy, { size: 8, color: [120, 120, 120] });
-      text(value, gx, gy + 6, { size: 10, bold: true, color: [0, 0, 0] });
-    });
+    const avatarSize = 22;
+    const avatarY = currentY + 8;
+    const leftAvatarX = heroX + 10;
+    const rightAvatarX = heroX + heroW - 10 - avatarSize;
 
-    currentY += 42;
+    // Left: logo
+    if (logoBase64) {
+      try {
+        const roundedLogo = await this.createRoundedImage(logoBase64, avatarSize);
+        this.doc.addImage(roundedLogo, 'PNG', leftAvatarX, avatarY, avatarSize, avatarSize);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Right: patient photo
+    if (patientPhotoBase64) {
+      try {
+        const roundedPhoto = await this.createRoundedImage(patientPhotoBase64, avatarSize);
+        this.doc.addImage(roundedPhoto, 'PNG', rightAvatarX, avatarY, avatarSize, avatarSize);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Arabic name (centered, Cairo, RTL)
+    const patientName = patient.fullNameArabic || 'Unknown Patient';
+    text(patientName, heroX + heroW / 2, currentY + 32, { size: 18, bold: true, color: primaryBlue, align: 'center', rtl: true });
+
+    // Info row (English labels only, chosen fields)
+    const phone = patient.contactInfo?.phone || '—';
+    const genderValue = patient.gender === 'Male' ? 'Male' : patient.gender === 'Female' ? 'Female' : 'Other';
+    const infoLine = [
+      `Age: ${ageDisplay}`,
+      `Gender: ${genderValue}`,
+      `Weight: ${weight ? `${weight} kg` : '—'}`,
+      `Clinic Branch: ${clinicBranch || '—'}`,
+      `Phone: ${phone}`
+    ].join('   •   ');
+    text(infoLine, heroX + heroW / 2, currentY + 45, { size: 9, color: [90, 90, 90], align: 'center' });
+
+    // Serial pill
+    this.doc.setDrawColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
+    this.doc.roundedRect(heroX + 10, currentY + heroH - 12, 52, 9, 4, 4, 'S');
+    text(`Serial: ${patient.code}`, heroX + 12, currentY + heroH - 6, { size: 8, color: dark });
+
+    currentY += heroH + 14;
 
     // ===== Clinical Information Card =====
     ensurePageSpace(55);
@@ -635,28 +670,7 @@ export class PDFReportGenerator {
       currentY += 10 + noteLines.length * 6;
     }
 
-    // Planned surgery block (if any)
-    const planned = patient.plannedSurgery;
-    if (planned && (planned.operation || planned.estimatedCost || planned.operationCategory)) {
-      ensurePageSpace(28);
-      this.doc.setFillColor(255, 251, 235); // similar to warning light
-      this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-      this.doc.roundedRect(clinicalCard.x + clinicalCard.padding, currentY, clinicalCard.w - clinicalCard.padding * 2, 22, 4, 4, 'FD');
-      text('Planned Surgery', clinicalCard.x + clinicalCard.padding + 6, currentY + 8, { size: 10, bold: true, color: [146, 64, 14] });
-      const plannedLine = [
-        planned.operationCategory ? planned.operationCategory : '',
-        planned.operation ? planned.operation : '',
-      ].filter(Boolean).join(' — ');
-      if (plannedLine) {
-        text(plannedLine, clinicalCard.x + clinicalCard.padding + 6, currentY + 15, { size: 9, color: [80, 80, 80] });
-      }
-      if (planned.estimatedCost) {
-        text(`Estimated: ${planned.estimatedCost} ${(planned.costCurrency || 'EGP')}`, clinicalCard.x + clinicalCard.w - clinicalCard.padding - 6, currentY + 15, {
-          size: 9, bold: true, color: primaryBlue, align: 'right'
-        });
-      }
-      currentY += 28;
-    }
+    // Planned surgery section excluded per your selection
 
     currentY += 10;
 
@@ -798,47 +812,48 @@ export class PDFReportGenerator {
       }
     }
 
-    // ===== Files / Images =====
-    if (patient.files && (patient.files.personalImage || patient.files.surgeryImage || (patient.files.lab?.length || 0) > 0 || (patient.files.radiology?.length || 0) > 0)) {
-      ensurePageSpace(55);
-      text('Files & Images', margin, currentY, { size: 13, bold: true, color: primaryBlue });
-      currentY += 10;
+    // Files section excluded per your selection
 
-      const thumbSize = 28;
-      const gap = 8;
-      let x = margin;
-      let y = currentY;
-
-      const imageSlots: Array<{ label: string; url?: string }> = [
-        { label: 'Personal Image', url: patient.files.personalImage },
-        { label: 'Patient Sheet Image', url: patient.files.surgeryImage },
-      ];
-
-      for (const slot of imageSlots) {
-        if (!slot.url) continue;
-        ensurePageSpace(thumbSize + 16);
-        const dataUrl = await this.loadImageAsBase64(slot.url);
-        if (dataUrl) {
-          const format = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-          this.doc.setDrawColor(230, 233, 238);
-          this.doc.roundedRect(x, y, thumbSize, thumbSize, 3, 3, 'S');
-          try {
-            this.doc.addImage(dataUrl, format as any, x, y, thumbSize, thumbSize);
-          } catch {
-            // ignore
-          }
-          text(slot.label, x, y + thumbSize + 6, { size: 8, color: [120, 120, 120] });
-          x += thumbSize + gap;
-        }
-      }
-
-      currentY = y + thumbSize + 18;
-      const labCount = patient.files.lab?.length || 0;
-      const radCount = patient.files.radiology?.length || 0;
-      text(`Lab files: ${labCount}`, margin, currentY, { size: 9, color: [80, 80, 80] });
-      text(`X-ray/Radiology files: ${radCount}`, margin + 70, currentY, { size: 9, color: [80, 80, 80] });
-      currentY += 12;
+    // ===== Provider Signature Block (like your example) =====
+    // Keep it near the bottom of the last page; if not enough space, add a page.
+    const sigBlockH = 44;
+    if (currentY + sigBlockH > pageHeight - 20) {
+        this.doc.addPage();
+      currentY = 25;
     }
+
+    const doctorName = 'Professor Doctor Tamer Ashraf';
+    const labelColor: [number, number, number] = [0, 0, 0];
+    const valueColor: [number, number, number] = [90, 90, 90];
+    const leftX = margin;
+    const rightX = pageWidth / 2 + 10;
+    const colW = pageWidth - margin - rightX;
+
+    // Left column
+    text('Provider/Physician Name', leftX, currentY + 8, { bold: true, size: 12, color: labelColor });
+    text(doctorName, leftX, currentY + 18, { size: 12, color: valueColor });
+    text('Title', leftX, currentY + 32, { bold: true, size: 12, color: labelColor });
+    text('Professor Doctor', leftX, currentY + 42, { size: 12, color: valueColor });
+
+    // Right column
+    text('Provider/Physician Signature', rightX, currentY + 8, { bold: true, size: 12, color: labelColor });
+    const sigLineY = currentY + 30;
+    this.doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    this.doc.setLineWidth(0.6);
+    this.doc.line(rightX, sigLineY, rightX + colW, sigLineY);
+
+    if (signatureBase64) {
+      try {
+        const fmt = signatureBase64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        // Place signature above the line
+        this.doc.addImage(signatureBase64, fmt as any, rightX + 4, currentY + 14, colW - 8, 14);
+      } catch {
+        // ignore
+      }
+    }
+
+    text('Date Signed', rightX, currentY + 38, { bold: true, size: 12, color: labelColor });
+    text(this.formatDateLong(generatedAt), rightX, currentY + 48, { size: 12, color: valueColor });
 
     // Footer (page number + confidential)
     const totalPages = this.doc.getNumberOfPages();

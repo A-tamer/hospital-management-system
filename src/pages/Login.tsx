@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Shield } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { FirebaseService } from '../services/firebaseService';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
-import { verifyPassword, verifyPasswordWithSalt } from '../utils/passwordHash';
-import { saveSession } from '../utils/sessionManager';
-import { getJwtToken } from '../utils/jwt';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -34,54 +33,49 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Find user by email
-      const user = await FirebaseService.getUserByEmail(loginForm.email);
+      // Sign in with Firebase Authentication
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        loginForm.email,
+        loginForm.password
+      );
+
+      // Get user metadata from Firestore using Firebase Auth UID
+      const userDoc = await FirebaseService.getUserById(userCredential.user.uid);
       
-      if (!user) {
-        setLoginError(t('login.error'));
-        showError(t('login.error'));
+      if (!userDoc) {
+        // User authenticated but no metadata in Firestore
+        setLoginError('User data not found. Please contact administrator.');
+        showError('User data not found. Please contact administrator.');
+        await auth.signOut();
         return;
       }
 
-      // Check if password is hashed (contains ':' for salted hash) or plain text (backward compatibility)
-      let passwordValid = false;
-      if (user.password.includes(':')) {
-        // Salted hash format
-        passwordValid = await verifyPasswordWithSalt(loginForm.password, user.password);
-      } else if (user.password.length === 64) {
-        // Simple SHA-256 hash (64 hex characters)
-        passwordValid = await verifyPassword(loginForm.password, user.password);
-      } else {
-        // Plain text password (backward compatibility - migrate on first login)
-        passwordValid = user.password === loginForm.password;
-        if (passwordValid) {
-          // Migrate to hashed password
-          const { hashPasswordWithSalt } = await import('../utils/passwordHash');
-          const hashedPassword = await hashPasswordWithSalt(loginForm.password);
-          await FirebaseService.updateUser(user.id, { password: hashedPassword });
-        }
-      }
-
-      if (passwordValid) {
-        // Remove password from user object before storing (security)
-        const { password, ...userWithoutPassword } = user;
-        dispatch({ type: 'SET_CURRENT_USER', payload: userWithoutPassword });
-        localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
-        // Save session with expiration + store JWT token
-        saveSession(userWithoutPassword);
-        const token = getJwtToken();
-        console.debug('JWT token created for user', userWithoutPassword.email, token ? '✅' : '⚠️ no token');
-        setLoginForm({ email: '', password: '' });
-        showSuccess(t('login.welcomeBack') || `Welcome back, ${userWithoutPassword.name}!`, undefined, true);
-        navigate('/');
-      } else {
-        setLoginError(t('login.error'));
-        showError(t('login.error'));
-      }
-    } catch (error) {
+      // Store user data in context (without password - not stored in Firestore anymore)
+      dispatch({ type: 'SET_CURRENT_USER', payload: userDoc });
+      localStorage.setItem('currentUser', JSON.stringify(userDoc));
+      
+      setLoginForm({ email: '', password: '' });
+      showSuccess(t('login.welcomeBack') || `Welcome back, ${userDoc.name}!`, undefined, true);
+      navigate('/');
+    } catch (error: any) {
       console.error('Login error:', error);
-      setLoginError(t('login.error'));
-      showError(t('login.error'));
+      
+      // Provide user-friendly error messages
+      let errorMessage = t('login.error') || 'Invalid email or password';
+      
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+        errorMessage = 'Invalid email or password';
+      } else if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed attempts. Please try again later';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection';
+      }
+      
+      setLoginError(errorMessage);
+      showError(errorMessage);
     } finally {
       setIsLoading(false);
     }

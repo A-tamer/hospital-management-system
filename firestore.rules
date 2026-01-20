@@ -1,8 +1,7 @@
 // ============================================
-// FIRESTORE SECURITY RULES - PRODUCTION
+// FIRESTORE SECURITY RULES - PRODUCTION READY
 // ============================================
-// Copy this entire file and paste it in:
-// Firebase Console → Firestore Database → Rules
+// Updated to require Firebase Authentication
 // ============================================
 
 rules_version = '2';
@@ -10,41 +9,59 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
+    
+    // Check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Check if user is admin
+    function isAdmin() {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Check if user is doctor or admin
+    function isDoctorOrAdmin() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'doctor'
+      );
+    }
+    
+    // ==========================================
     // PATIENTS COLLECTION
     // ==========================================
     match /patients/{patientId} {
-      // Allow anyone to read patient data
-      // NOTE: Change to "request.auth != null" if you want only logged-in users
-      allow read: if true;
+      // All authenticated users can read patients
+      allow read: if isSignedIn();
       
-      // Allow anyone to create patients
-      // NOTE: Change to "request.auth != null" if you want only logged-in users
-      allow create: if true;
+      // All authenticated users can create patients
+      allow create: if isSignedIn();
       
-      // Allow anyone to update patients
-      // NOTE: Change to "request.auth != null" if you want only logged-in users
-      allow update: if true;
+      // All authenticated users can update patients
+      allow update: if isSignedIn();
       
-      // Allow anyone to delete patients
-      // NOTE: Change to "request.auth != null" if you want only logged-in users
-      // Or set to "false" to prevent deletion
-      allow delete: if true;
+      // Only admins can delete patients
+      allow delete: if isAdmin();
     }
     
     // ==========================================
     // USERS COLLECTION
     // ==========================================
     match /users/{userId} {
-      // Allow anyone to read users
-      allow read: if true;
+      // All authenticated users can read user list
+      allow read: if isSignedIn();
       
-      // Allow anyone to create users
-      allow create: if true;
+      // Only admins can create new users
+      allow create: if isAdmin();
       
-      // Allow anyone to update users
-      allow update: if true;
+      // Admins can update any user, users can update themselves
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       
-      // Prevent deletion of users (recommended)
+      // No one can delete users (admins should disable accounts instead)
       allow delete: if false;
     }
     
@@ -60,14 +77,20 @@ service cloud.firestore {
 // ============================================
 // SECURITY NOTES:
 // ============================================
-// 1. Current rules allow public access
-// 2. This is OK for development/testing
-// 3. For production with real patient data:
-//    - Enable Firebase Authentication
-//    - Change "if true" to "if request.auth != null"
-//    - This ensures only logged-in users can access
-// 4. For maximum security:
-//    - Implement role-based access control
-//    - See PRODUCTION_SECURITY_GUIDE.md for details
+// 1. All operations now require Firebase Authentication
+// 2. Patient data can only be accessed by authenticated users
+// 3. Only admins can delete patients
+// 4. Only admins can create new user accounts
+// 5. User accounts cannot be deleted (prevents data loss)
+// 6. Medical data is protected from unauthorized access
 // ============================================
 
+// ============================================
+// DEPLOYMENT INSTRUCTIONS:
+// ============================================
+// 1. Go to Firebase Console
+// 2. Navigate to Firestore Database → Rules
+// 3. Copy and paste this entire file
+// 4. Click "Publish"
+// 5. Test your application to ensure it works
+// ============================================

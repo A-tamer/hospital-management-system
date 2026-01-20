@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { Patient, User, SafeUser, FilterOptions } from '../types';
 import { FirebaseService } from '../services/firebaseService';
-import { getSession, clearSession, extendSession, saveSession } from '../utils/sessionManager';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 interface PatientState {
   patients: Patient[];
@@ -85,100 +86,94 @@ const patientReducer = (state: PatientState, action: PatientAction): PatientStat
 export const PatientProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(patientReducer, initialState);
 
-  // Initialize Firebase and set up real-time listeners
+  // Listen for Firebase Auth state changes
   useEffect(() => {
-    const initializeFirebase = async () => {
-      try {
-        dispatch({ type: 'SET_LOADING', payload: true });
-        dispatch({ type: 'SET_ERROR', payload: null });
-      
-        // Set up real-time listeners
-        const unsubscribePatients = FirebaseService.subscribeToPatients((patients) => {
-          dispatch({ type: 'SET_PATIENTS', payload: patients });
-          dispatch({ type: 'SET_LOADING', payload: false });
-        });
-
-        const unsubscribeUsers = FirebaseService.subscribeToUsers((users) => {
-          dispatch({ type: 'SET_USERS', payload: users });
-        });
-
-        // Load current user from session (for session persistence)
-        const session = getSession();
-        if (session && session.user) {
-          dispatch({ type: 'SET_CURRENT_USER', payload: session.user });
-          // Extend session on activity
-          extendSession();
-        } else {
-          // Fallback to old localStorage for backward compatibility
-          const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-          if (currentUser) {
-            dispatch({ type: 'SET_CURRENT_USER', payload: currentUser });
-            // Migrate to session
-            saveSession(currentUser);
-          }
-        }
-
-        // Monitor online status
-        const handleOnline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
-        const handleOffline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
-
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        // Cleanup function
-        return () => {
-          unsubscribePatients();
-          unsubscribeUsers();
-          window.removeEventListener('online', handleOnline);
-          window.removeEventListener('offline', handleOffline);
-        };
-      } catch (error) {
-        console.error('Error initializing Firebase:', error);
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to connect to database' });
-        dispatch({ type: 'SET_LOADING', payload: false });
-        
-        // Fallback to localStorage if Firebase fails
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    
+    // Listen for Firebase Auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in - get user metadata from Firestore
         try {
-          const patients = JSON.parse(localStorage.getItem('patients') || '[]');
-          const users = JSON.parse(localStorage.getItem('users') || '[]');
-          const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-          
-          dispatch({ type: 'SET_PATIENTS', payload: patients });
-          dispatch({ type: 'SET_USERS', payload: users });
-          dispatch({ type: 'SET_CURRENT_USER', payload: currentUser });
-          dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
-        } catch (localError) {
-          console.error('Error loading from localStorage:', localError);
+          const userDoc = await FirebaseService.getUserById(firebaseUser.uid);
+          if (userDoc) {
+            dispatch({ type: 'SET_CURRENT_USER', payload: userDoc });
+            localStorage.setItem('currentUser', JSON.stringify(userDoc));
+          } else {
+            console.error('User authenticated but no metadata found');
+            dispatch({ type: 'SET_CURRENT_USER', payload: null });
+            localStorage.removeItem('currentUser');
+          }
+        } catch (error) {
+          console.error('Error loading user metadata:', error);
+          dispatch({ type: 'SET_CURRENT_USER', payload: null });
         }
+      } else {
+        // User is signed out
+        dispatch({ type: 'SET_CURRENT_USER', payload: null });
+        localStorage.removeItem('currentUser');
+        dispatch({ type: 'SET_LOADING', payload: false });
       }
-    };
+    });
 
-    initializeFirebase();
+    // Monitor online status
+    const handleOnline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
+    const handleOffline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Cleanup function
+    return () => {
+      unsubscribeAuth();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  // Save current user to session whenever it changes
+  // Set up Firestore listeners ONLY when user is authenticated
   useEffect(() => {
-    if (state.currentUser) {
-      saveSession(state.currentUser);
-      localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
-    } else {
-      clearSession();
+    if (!state.currentUser) {
+      // No user logged in - clear data and don't set up listeners
+      dispatch({ type: 'SET_PATIENTS', payload: [] });
+      dispatch({ type: 'SET_USERS', payload: [] });
+      return;
     }
-  }, [state.currentUser]);
 
-  // Check session validity periodically
-  useEffect(() => {
-    const checkSession = () => {
-      const session = getSession();
-      if (!session && state.currentUser) {
-        dispatch({ type: 'SET_CURRENT_USER', payload: null });
-        clearSession();
+    // User is authenticated - now it's safe to set up Firestore listeners
+    dispatch({ type: 'SET_LOADING', payload: true });
+
+    try {
+      const unsubscribePatients = FirebaseService.subscribeToPatients((patients) => {
+        dispatch({ type: 'SET_PATIENTS', payload: patients });
+        dispatch({ type: 'SET_LOADING', payload: false });
+        dispatch({ type: 'SET_ERROR', payload: null });
+      });
+
+      const unsubscribeUsers = FirebaseService.subscribeToUsers((users) => {
+        dispatch({ type: 'SET_USERS', payload: users });
+      });
+
+      // Cleanup listeners when component unmounts or user changes
+      return () => {
+        unsubscribePatients();
+        unsubscribeUsers();
+      };
+    } catch (error: any) {
+      console.error('Error setting up Firestore listeners:', error);
+      
+      // Provide helpful error message based on error type
+      let errorMessage = 'Failed to load data';
+      if (error?.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Please make sure Firestore rules are deployed.';
       }
-    };
+      
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [state.currentUser]); // Re-run when currentUser changes
 
-    const interval = setInterval(checkSession, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, [state.currentUser]);
 
   return (
     <PatientContext.Provider value={{ state, dispatch }}>

@@ -21,7 +21,8 @@ import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { hashPasswordWithSalt } from '../utils/passwordHash';
+import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
 import { 
   exportDatabase, 
   downloadDatabaseAsJSON, 
@@ -72,36 +73,67 @@ const Admin: React.FC = () => {
 
     setIsSaving(true);
     try {
-      // Hash password if provided (new user or password change)
-      let hashedPassword = editingUser?.password || '';
-      if (userForm.password.trim()) {
-        hashedPassword = await hashPasswordWithSalt(userForm.password);
-      }
-
-      const userData: Omit<User, 'id'> = {
-        name: userForm.name.trim(),
-        email: userForm.email.trim(),
-        password: hashedPassword,
-        role: userForm.role,
-        canViewFinancial: userForm.canViewFinancial,
-        createdAt: editingUser?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
       if (editingUser) {
+        // UPDATE existing user
+        const userData: Partial<User> = {
+          name: userForm.name.trim(),
+          email: userForm.email.trim(),
+          role: userForm.role,
+          canViewFinancial: userForm.canViewFinancial,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Update metadata in Firestore
         await updateUserFirebase(editingUser.id, userData);
+
+        // Note: Updating email or password in Firebase Auth requires re-authentication
+        // For production, consider sending password reset email instead
+        if (userForm.password.trim()) {
+          showError('Password update not supported yet. Use password reset feature.');
+        }
+
         showSuccess(t('admin.userUpdated') || 'User account has been updated');
       } else {
-        await addUserFirebase(userData);
+        // CREATE new user with Firebase Authentication
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          userForm.email.trim(),
+          userForm.password
+        );
+
+        // Store user metadata in Firestore using Auth UID as document ID
+        const userData: Omit<User, 'id'> = {
+          name: userForm.name.trim(),
+          email: userForm.email.trim(),
+          password: '', // No password stored in Firestore anymore
+          role: userForm.role,
+          canViewFinancial: userForm.canViewFinancial,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await FirebaseService.createUserWithId(userCredential.user.uid, userData);
         showSuccess(t('admin.userCreated') || 'New user account has been created');
       }
 
       setUserForm({ name: '', email: '', password: '', role: 'user', canViewFinancial: false });
       setShowUserForm(false);
       setEditingUser(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving user:', error);
-      showError(t('admin.saveError') || 'Unable to save user account. Please check your connection and try again.');
+      
+      // Provide user-friendly error messages
+      let errorMessage = t('admin.saveError') || 'Unable to save user account';
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already registered';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password must be at least 6 characters';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      }
+      
+      showError(errorMessage);
     } finally {
       setIsSaving(false);
     }
