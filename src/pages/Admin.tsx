@@ -21,7 +21,7 @@ import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { 
   exportDatabase, 
@@ -33,10 +33,10 @@ import {
 
 const Admin: React.FC = () => {
   const navigate = useNavigate();
-  const { state, dispatch } = usePatientContext();
+  const { state } = usePatientContext();
   const { t } = useLanguage();
   const { showSuccess, showError } = useToast();
-  const { addUser: addUserFirebase, updateUser: updateUserFirebase, deleteUser: deleteUserFirebase } = useFirebaseOperations();
+  const { updateUser: updateUserFirebase, deleteUser: deleteUserFirebase } = useFirebaseOperations();
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',

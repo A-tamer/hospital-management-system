@@ -16,7 +16,7 @@ import { auth } from '../config/firebase';
 const Navbar: React.FC = () => {
   const location = useLocation();
   const { state, dispatch } = usePatientContext();
-  const { language, setLanguage, t, dir } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
 
   const handleLogout = async () => {
     try {
