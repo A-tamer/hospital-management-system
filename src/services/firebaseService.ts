@@ -177,18 +177,25 @@ export const FirebaseService = {
   },
 
   async createUserWithId(userId: string, user: Omit<User, 'id'>): Promise<void> {
-    const safeUser = {
-      name: user.name || 'Unnamed User',
-      email: user.email || '',
-      password: '', // No password stored in Firestore with Firebase Auth
-      role: user.role || 'user',
-      canViewFinancial: user.canViewFinancial || false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const safeUser = {
+        name: user.name || 'Unnamed User',
+        email: user.email || '',
+        password: '', // No password stored in Firestore with Firebase Auth
+        role: user.role || 'user',
+        canViewFinancial: user.canViewFinancial || false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, safeUser);
+      console.log('Creating user document in Firestore:', userId, safeUser);
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, safeUser);
+      console.log('User document created successfully in Firestore');
+    } catch (error) {
+      console.error('Error creating user document in Firestore:', error);
+      throw error; // Re-throw so the caller can handle it
+    }
   },
 
   async updateUser(id: string, updatedData: Partial<User>) {

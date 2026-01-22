@@ -112,7 +112,9 @@ const Admin: React.FC = () => {
           updatedAt: new Date().toISOString(),
         };
 
+        console.log('Creating Firestore user document with UID:', userCredential.user.uid);
         await FirebaseService.createUserWithId(userCredential.user.uid, userData);
+        console.log('Firestore user document created successfully');
         showSuccess(t('admin.userCreated') || 'New user account has been created');
       }
 
@@ -121,6 +123,8 @@ const Admin: React.FC = () => {
       setEditingUser(null);
     } catch (error: any) {
       console.error('Error saving user:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
       
       // Provide user-friendly error messages
       let errorMessage = t('admin.saveError') || 'Unable to save user account';
@@ -131,6 +135,10 @@ const Admin: React.FC = () => {
         errorMessage = 'Password must be at least 6 characters';
       } else if (error.code === 'auth/invalid-email') {
         errorMessage = 'Invalid email address';
+      } else if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied: Make sure you are logged in as admin and Firestore rules are deployed';
+      } else if (error.message) {
+        errorMessage = `Error: ${error.message}`;
       }
       
       showError(errorMessage);
