@@ -21,8 +21,9 @@ import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { createUserWithEmailAndPassword, getAuth, inMemoryPersistence, setPersistence, signOut } from 'firebase/auth';
+import { auth, firebaseConfig } from '../config/firebase';
 import { 
   exportDatabase, 
   downloadDatabaseAsJSON, 
@@ -94,27 +95,37 @@ const Admin: React.FC = () => {
 
         showSuccess(t('admin.userUpdated') || 'User account has been updated');
       } else {
-        // CREATE new user with Firebase Authentication
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          userForm.email.trim(),
-          userForm.password
-        );
+        // CREATE new user with Firebase Authentication (secondary app to avoid switching accounts)
+        const secondaryApp = initializeApp(firebaseConfig, 'SecondaryAuth');
+        const secondaryAuth = getAuth(secondaryApp);
+        await setPersistence(secondaryAuth, inMemoryPersistence);
 
-        // Store user metadata in Firestore using Auth UID as document ID
-        const userData: Omit<User, 'id'> = {
-          name: userForm.name.trim(),
-          email: userForm.email.trim(),
-          password: '', // No password stored in Firestore anymore
-          role: userForm.role,
-          canViewFinancial: userForm.canViewFinancial,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+        try {
+          const userCredential = await createUserWithEmailAndPassword(
+            secondaryAuth,
+            userForm.email.trim(),
+            userForm.password
+          );
 
-        console.log('Creating Firestore user document with UID:', userCredential.user.uid);
-        await FirebaseService.createUserWithId(userCredential.user.uid, userData);
-        console.log('Firestore user document created successfully');
+          // Store user metadata in Firestore using Auth UID as document ID
+          const userData: Omit<User, 'id'> = {
+            name: userForm.name.trim(),
+            email: userForm.email.trim(),
+            password: '', // No password stored in Firestore anymore
+            role: userForm.role,
+            canViewFinancial: userForm.canViewFinancial,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          console.log('Creating Firestore user document with UID:', userCredential.user.uid);
+          await FirebaseService.createUserWithId(userCredential.user.uid, userData);
+          console.log('Firestore user document created successfully');
+        } finally {
+          // Clean up secondary auth session so admin stays logged in
+          await signOut(secondaryAuth);
+          await deleteApp(secondaryApp);
+        }
         showSuccess(t('admin.userCreated') || 'New user account has been created');
       }
 

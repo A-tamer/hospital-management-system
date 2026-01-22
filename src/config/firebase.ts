@@ -38,4 +38,4 @@ const analytics = getAnalytics(app);
 // Initialize Storage
 const storage = getStorage(app);
 
-export { app, db, auth, analytics, storage };
+export { app, db, auth, analytics, storage, firebaseConfig };
