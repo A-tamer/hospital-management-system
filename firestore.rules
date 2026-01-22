@@ -61,8 +61,8 @@ service cloud.firestore {
       // Admins can update any user, users can update themselves
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       
-      // No one can delete users (admins should disable accounts instead)
-      allow delete: if false;
+      // Only admins can delete users (except themselves)
+      allow delete: if isAdmin() && request.auth.uid != userId;
     }
     
     // ==========================================
