@@ -1,10 +1,10 @@
-import React, { useRef, useCallback } from 'react';
-import { useReactToPrint } from 'react-to-print';
-import { Printer, Download, Eye } from 'lucide-react';
+import React, { useRef, useCallback, useState } from 'react';
+import { Download } from 'lucide-react';
 import { Patient } from '../../types';
 import PrintableReport from './PrintableReport';
 import './PatientReportPrinter.css';
 
+// We'll use the browser's print to PDF feature with a hidden iframe
 interface PatientReportPrinterProps {
   patient: Patient;
   clinicInfo?: {
@@ -19,161 +19,138 @@ interface PatientReportPrinterProps {
   reportTitle?: string;
   doctorName?: string;
   doctorTitle?: string;
-  buttonStyle?: 'icon' | 'full' | 'compact';
-  showPreview?: boolean;
+  signatureImage?: string;
+  buttonText?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 const PatientReportPrinter: React.FC<PatientReportPrinterProps> = ({
   patient,
   clinicInfo,
   reportTitle,
-  doctorName,
-  doctorTitle,
-  buttonStyle = 'full',
-  showPreview = false,
+  doctorName = 'Prof. Doctor Tamer Ashraf',
+  doctorTitle = 'Consultant Pediatric Surgeon',
+  signatureImage = '/imgs/signature-tamer-ashraf.png',
+  buttonText = 'Export PDF',
   className = '',
+  disabled = false,
 }) => {
   const componentRef = useRef<HTMLDivElement>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const handlePrint = useReactToPrint({
-    contentRef: componentRef,
-    documentTitle: `Patient_Report_${patient.code || patient.id}_${new Date().toISOString().split('T')[0]}`,
-    pageStyle: `
-      @page {
-        size: A4;
-        margin: 0;
-      }
-      @media print {
-        html, body {
-          height: 297mm;
-          width: 210mm;
+  const handleExportPDF = useCallback(async () => {
+    if (!componentRef.current || isGenerating) return;
+
+    setIsGenerating(true);
+
+    try {
+      // Dynamic import to reduce bundle size
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const element = componentRef.current;
+      
+      // Get all report pages
+      const pages = element.querySelectorAll('.report-page');
+      
+      // A4 dimensions in mm
+      const a4Width = 210;
+      const a4Height = 297;
+      
+      // Create PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i] as HTMLElement;
+        
+        // Render page to canvas with high quality
+        const canvas = await html2canvas(page, {
+          scale: 2, // Higher scale for better quality
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: page.scrollWidth,
+          windowHeight: page.scrollHeight,
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        
+        // Calculate dimensions to fit A4
+        const imgWidth = a4Width;
+        const imgHeight = (canvas.height * a4Width) / canvas.width;
+
+        if (i > 0) {
+          pdf.addPage();
         }
+
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, Math.min(imgHeight, a4Height));
       }
-    `,
-    onBeforePrint: () => {
-      console.log('Preparing to print patient report...');
-      return Promise.resolve();
-    },
-    onAfterPrint: () => {
-      console.log('Print completed or cancelled');
-      if (isPreviewOpen) {
-        setIsPreviewOpen(false);
-      }
-    },
-  });
 
-  const handlePrintClick = useCallback(() => {
-    if (handlePrint) {
-      handlePrint();
+      // Generate filename
+      const filename = `Patient_Report_${patient.code || patient.id}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Download the PDF
+      pdf.save(filename);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      // Fallback to print dialog
+      window.print();
+    } finally {
+      setIsGenerating(false);
     }
-  }, [handlePrint]);
-
-  const handlePreviewClick = useCallback(() => {
-    setIsPreviewOpen(true);
-  }, []);
-
-  const handleClosePreview = useCallback(() => {
-    setIsPreviewOpen(false);
-  }, []);
-
-  const renderButton = () => {
-    switch (buttonStyle) {
-      case 'icon':
-        return (
-          <button
-            onClick={handlePrintClick}
-            className={`print-btn print-btn-icon ${className}`}
-            title="Print Patient Report"
-          >
-            <Printer size={18} />
-          </button>
-        );
-      case 'compact':
-        return (
-          <button
-            onClick={handlePrintClick}
-            className={`print-btn print-btn-compact ${className}`}
-          >
-            <Printer size={16} />
-            <span>Print</span>
-          </button>
-        );
-      default:
-        return (
-          <div className={`print-btn-group ${className}`}>
-            {showPreview && (
-              <button
-                onClick={handlePreviewClick}
-                className="print-btn print-btn-secondary"
-              >
-                <Eye size={16} />
-                <span>Preview</span>
-              </button>
-            )}
-            <button
-              onClick={handlePrintClick}
-              className="print-btn print-btn-primary"
-            >
-              <Printer size={16} />
-              <span>Print Report</span>
-            </button>
-          </div>
-        );
-    }
-  };
+  }, [patient, isGenerating]);
 
   return (
     <>
-      {renderButton()}
+      <button
+        onClick={handleExportPDF}
+        className={`export-pdf-btn ${className}`}
+        disabled={disabled || isGenerating}
+        style={{ 
+          background: isGenerating ? '#9ca3af' : '#17a2b8', 
+          color: 'white', 
+          border: 'none',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.5rem 1rem',
+          borderRadius: '0.375rem',
+          fontWeight: 500,
+          cursor: disabled || isGenerating ? 'not-allowed' : 'pointer',
+          transition: 'background 0.2s',
+        }}
+      >
+        <Download size={16} />
+        {isGenerating ? 'Generating PDF...' : buttonText}
+      </button>
 
-      {/* Hidden printable component */}
-      <div style={{ display: 'none' }}>
+      {/* Hidden printable component for PDF generation */}
+      <div 
+        ref={componentRef} 
+        style={{ 
+          position: 'absolute',
+          left: '-9999px',
+          top: 0,
+          width: '210mm',
+          background: 'white',
+        }}
+      >
         <PrintableReport
-          ref={componentRef}
           patient={patient}
           clinicInfo={clinicInfo}
           reportTitle={reportTitle}
           doctorName={doctorName}
           doctorTitle={doctorTitle}
+          signatureImage={signatureImage}
         />
       </div>
-
-      {/* Preview Modal */}
-      {isPreviewOpen && (
-        <div className="report-preview-overlay" onClick={handleClosePreview}>
-          <div className="report-preview-container" onClick={(e) => e.stopPropagation()}>
-            <div className="report-preview-header">
-              <h3>Report Preview</h3>
-              <div className="report-preview-actions">
-                <button
-                  onClick={handlePrintClick}
-                  className="print-btn print-btn-primary"
-                >
-                  <Printer size={16} />
-                  <span>Print</span>
-                </button>
-                <button
-                  onClick={handleClosePreview}
-                  className="print-btn print-btn-secondary"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="report-preview-content">
-              <PrintableReport
-                patient={patient}
-                clinicInfo={clinicInfo}
-                reportTitle={reportTitle}
-                doctorName={doctorName}
-                doctorTitle={doctorTitle}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

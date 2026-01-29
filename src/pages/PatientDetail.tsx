@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, Download, LogIn, LogOut, Printer } from 'lucide-react';
+import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, LogIn, LogOut } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { useLanguage } from '../context/LanguageContext';
-import { generatePDFReport } from '../utils/pdfGenerator';
 import { useToast } from '../components/Toast';
 import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 import { PatientReportPrinter } from '../components/PrintableReport';
@@ -15,7 +14,6 @@ const PatientDetail: React.FC = () => {
   const { t } = useLanguage();
   const { showSuccess, showError } = useToast();
   const { updatePatient } = useFirebaseOperations();
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
 
   const patient = state.patients.find(p => p.id === id);
@@ -39,19 +37,6 @@ const PatientDetail: React.FC = () => {
 
   const handleEdit = () => {
     navigate(`/patients`, { state: { editPatientId: patient.id } });
-  };
-
-  const handleExportPDF = async () => {
-    setIsExportingPDF(true);
-    try {
-      await generatePDFReport.singlePatient(patient, t);
-      showSuccess(t('detail.pdfExported') || 'Patient PDF exported successfully');
-    } catch (error) {
-      console.error('PDF export error:', error);
-      showError(t('detail.pdfError') || 'Failed to generate PDF. Please try again.');
-    } finally {
-      setIsExportingPDF(false);
-    }
   };
 
   const handleCheckIn = async () => {
@@ -190,23 +175,13 @@ const PatientDetail: React.FC = () => {
               <ArrowLeft className="btn-icon" />
               {t('detail.backToPatients')}
             </button>
-            <button 
-              className="btn btn-secondary" 
-              onClick={handleExportPDF}
-              disabled={isExportingPDF}
-              style={{ background: '#17a2b8', color: 'white', border: 'none' }}
-            >
-              <Download className="btn-icon" />
-              {isExportingPDF ? (t('detail.exportingPDF') || 'Generating PDF...') : (t('detail.exportPDF') || 'Export PDF')}
-            </button>
             
-            {/* Print Professional Report */}
+            {/* Export Patient PDF - Auto Download */}
             <PatientReportPrinter
               patient={patient}
-              buttonStyle="compact"
-              showPreview={true}
-              doctorName="Dr. Wafa"
-              doctorTitle="MD, Surgeon"
+              buttonText={t('detail.exportPDF') || 'Export PDF'}
+              doctorName="Prof. Doctor Tamer Ashraf"
+              doctorTitle="Consultant Pediatric Surgeon"
             />
             
             {/* Check-In / Check-Out Buttons */}

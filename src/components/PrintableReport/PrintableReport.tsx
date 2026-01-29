@@ -16,20 +16,28 @@ interface PrintableReportProps {
   reportTitle?: string;
   doctorName?: string;
   doctorTitle?: string;
+  signatureImage?: string;
 }
 
 const defaultClinicInfo: PrintableReportProps['clinicInfo'] = {
-  name: 'SurgiCare Medical Center',
-  tagline: 'Excellence in Surgical Care',
+  name: 'SurgiCare',
+  tagline: 'Excellence in Pediatric Surgery',
   address: 'Cairo Medical District, Egypt',
   phone: '+20 123 456 7890',
   email: 'info@surgicare.com',
   website: 'www.surgicare.com',
-  logo: undefined,
+  logo: '/imgs/logo.jpg',
 };
 
 const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
-  ({ patient, clinicInfo = defaultClinicInfo, reportTitle = 'Patient Medical Report', doctorName, doctorTitle }, ref) => {
+  ({ 
+    patient, 
+    clinicInfo = defaultClinicInfo, 
+    reportTitle = 'Patient Medical Report', 
+    doctorName = 'Prof. Doctor Tamer Ashraf',
+    doctorTitle = 'Consultant Pediatric Surgeon',
+    signatureImage = '/imgs/signature-tamer-ashraf.png'
+  }, ref) => {
     const formatDate = (dateString: string | undefined) => {
       if (!dateString) return 'N/A';
       try {
@@ -43,28 +51,13 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
       }
     };
 
-    const formatDateTime = (dateString: string | undefined) => {
-      if (!dateString) return 'N/A';
-      try {
-        return new Date(dateString).toLocaleString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-      } catch {
-        return dateString;
-      }
-    };
-
     const getStatusColor = (status: string) => {
       switch (status) {
-        case 'Diagnosed': return '#3b82f6';
-        case 'Pre-op': return '#f59e0b';
-        case 'Op': return '#ef4444';
-        case 'Post-op': return '#10b981';
-        default: return '#6b7280';
+        case 'Diagnosed': return '#4f46e5'; // Primary indigo
+        case 'Pre-op': return '#f59e0b';    // Warning amber
+        case 'Op': return '#ef4444';         // Danger red
+        case 'Post-op': return '#10b981';    // Success green
+        default: return '#6b7280';           // Gray
       }
     };
 
@@ -83,23 +76,22 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
           {/* Header */}
           <header className="report-header">
             <div className="header-left">
-              {clinicInfo.logo ? (
-                <img src={clinicInfo.logo} alt="Logo" className="clinic-logo" />
-              ) : (
-                <div className="clinic-logo-placeholder">
-                  <span>SC</span>
-                </div>
-              )}
+              <img 
+                src={clinicInfo?.logo || '/imgs/logo.jpg'} 
+                alt="SurgiCare Logo" 
+                className="clinic-logo"
+                crossOrigin="anonymous"
+              />
               <div className="clinic-info">
-                <h1 className="clinic-name">{clinicInfo.name}</h1>
-                {clinicInfo.tagline && <p className="clinic-tagline">{clinicInfo.tagline}</p>}
+                <h1 className="clinic-name">{clinicInfo?.name || 'SurgiCare'}</h1>
+                {clinicInfo?.tagline && <p className="clinic-tagline">{clinicInfo.tagline}</p>}
               </div>
             </div>
             <div className="header-right">
-              <p><strong>Phone:</strong> {clinicInfo.phone}</p>
-              <p><strong>Email:</strong> {clinicInfo.email}</p>
-              {clinicInfo.website && <p><strong>Web:</strong> {clinicInfo.website}</p>}
-              <p className="header-address">{clinicInfo.address}</p>
+              <p><strong>Phone:</strong> {clinicInfo?.phone}</p>
+              <p><strong>Email:</strong> {clinicInfo?.email}</p>
+              {clinicInfo?.website && <p><strong>Web:</strong> {clinicInfo.website}</p>}
+              <p className="header-address">{clinicInfo?.address}</p>
             </div>
           </header>
 
@@ -233,13 +225,37 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
             </section>
           )}
 
+          {/* Doctor Signature - Always show on page 1 if no surgeries */}
+          {(!patient.surgeries || patient.surgeries.length === 0) && (
+            <section className="signature-section page1-signature">
+              <div className="signature-single">
+                <div className="signature-box doctor-signature">
+                  {signatureImage && (
+                    <img 
+                      src={signatureImage} 
+                      alt="Doctor Signature" 
+                      className="signature-image"
+                      crossOrigin="anonymous"
+                    />
+                  )}
+                  <div className="signature-line"></div>
+                  <p className="signature-name">{doctorName}</p>
+                  <p className="signature-title">{doctorTitle}</p>
+                </div>
+              </div>
+              <div className="end-of-report">
+                <p>****End of Report****</p>
+              </div>
+            </section>
+          )}
+
           {/* Footer for Page 1 */}
           <footer className="report-footer">
             <div className="footer-divider"></div>
             <div className="footer-content">
               <div className="footer-left">
                 <p className="confidential">CONFIDENTIAL - Medical Report</p>
-                <p className="footer-clinic">{clinicInfo.name}</p>
+                <p className="footer-clinic">{clinicInfo?.name || 'SurgiCare'}</p>
               </div>
               <div className="footer-right">
                 <p>Page 1 of {patient.surgeries && patient.surgeries.length > 0 ? '2' : '1'}</p>
@@ -254,7 +270,13 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
             {/* Mini Header */}
             <header className="report-header mini-header">
               <div className="header-left">
-                <h2 className="clinic-name-small">{clinicInfo.name}</h2>
+                <img 
+                  src={clinicInfo?.logo || '/imgs/logo.jpg'} 
+                  alt="SurgiCare Logo" 
+                  className="clinic-logo-small"
+                  crossOrigin="anonymous"
+                />
+                <h2 className="clinic-name-small">{clinicInfo?.name || 'SurgiCare'}</h2>
               </div>
               <div className="header-right">
                 <p><strong>Patient:</strong> {patient.fullNameArabic}</p>
@@ -353,18 +375,21 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
               </section>
             )}
 
-            {/* Signature Section */}
+            {/* Doctor Signature Section */}
             <section className="signature-section">
-              <div className="signature-grid">
-                <div className="signature-box">
+              <div className="signature-single">
+                <div className="signature-box doctor-signature">
+                  {signatureImage && (
+                    <img 
+                      src={signatureImage} 
+                      alt="Doctor Signature" 
+                      className="signature-image"
+                      crossOrigin="anonymous"
+                    />
+                  )}
                   <div className="signature-line"></div>
-                  <p className="signature-name">{doctorName || 'Attending Physician'}</p>
-                  <p className="signature-title">{doctorTitle || 'MD, Surgeon'}</p>
-                </div>
-                <div className="signature-box">
-                  <div className="signature-line"></div>
-                  <p className="signature-name">Patient / Guardian</p>
-                  <p className="signature-title">Signature</p>
+                  <p className="signature-name">{doctorName}</p>
+                  <p className="signature-title">{doctorTitle}</p>
                 </div>
               </div>
             </section>
@@ -375,7 +400,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
               <div className="footer-content">
                 <div className="footer-left">
                   <p className="confidential">CONFIDENTIAL - Medical Report</p>
-                  <p className="footer-clinic">{clinicInfo.name}</p>
+                  <p className="footer-clinic">{clinicInfo?.name || 'SurgiCare'}</p>
                 </div>
                 <div className="footer-center">
                   <p>****End of Report****</p>
@@ -385,29 +410,6 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                 </div>
               </div>
             </footer>
-          </div>
-        )}
-
-        {/* Single Page Footer with Signature (if no surgeries) */}
-        {(!patient.surgeries || patient.surgeries.length === 0) && (
-          <div className="single-page-signature">
-            <section className="signature-section">
-              <div className="signature-grid">
-                <div className="signature-box">
-                  <div className="signature-line"></div>
-                  <p className="signature-name">{doctorName || 'Attending Physician'}</p>
-                  <p className="signature-title">{doctorTitle || 'MD, Surgeon'}</p>
-                </div>
-                <div className="signature-box">
-                  <div className="signature-line"></div>
-                  <p className="signature-name">Patient / Guardian</p>
-                  <p className="signature-title">Signature</p>
-                </div>
-              </div>
-            </section>
-            <div className="end-of-report">
-              <p>****End of Report****</p>
-            </div>
           </div>
         )}
       </div>
