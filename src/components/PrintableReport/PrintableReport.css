@@ -1,0 +1,485 @@
+/* PrintableReport.css - Professional A4 Medical Report Styles */
+
+/* Import professional fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap');
+
+/* A4 Page Setup */
+.printable-report {
+  font-family: 'Inter', 'Roboto', Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #1f2937;
+  background: white;
+}
+
+.report-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 15mm 20mm;
+  margin: 0 auto;
+  background: white;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Page Break */
+.page-break {
+  page-break-before: always;
+  break-before: page;
+}
+
+/* ================================
+   HEADER STYLES
+   ================================ */
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.clinic-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.clinic-logo-placeholder {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #0077b6 0%, #00a8e8 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.clinic-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.clinic-name {
+  font-size: 22pt;
+  font-weight: 700;
+  color: #0077b6;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.clinic-tagline {
+  font-size: 10pt;
+  color: #6b7280;
+  margin: 2px 0 0 0;
+  font-style: italic;
+}
+
+.header-right {
+  text-align: right;
+  font-size: 9pt;
+  color: #4b5563;
+}
+
+.header-right p {
+  margin: 2px 0;
+}
+
+.header-address {
+  margin-top: 8px !important;
+  font-size: 8pt;
+  color: #6b7280;
+}
+
+.header-divider {
+  height: 4px;
+  background: linear-gradient(90deg, #0077b6 0%, #00a8e8 50%, #0077b6 100%);
+  border-radius: 2px;
+  margin-bottom: 15px;
+}
+
+/* Mini Header for subsequent pages */
+.mini-header {
+  padding-bottom: 8px;
+}
+
+.mini-header .clinic-name-small {
+  font-size: 14pt;
+  font-weight: 600;
+  color: #0077b6;
+  margin: 0;
+}
+
+/* ================================
+   REPORT TITLE
+   ================================ */
+.report-title-section {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 10px 0;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.report-title {
+  font-size: 16pt;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.report-generated {
+  font-size: 9pt;
+  color: #6b7280;
+  margin: 5px 0 0 0;
+}
+
+/* ================================
+   SECTION STYLES
+   ================================ */
+.section-title {
+  font-size: 12pt;
+  font-weight: 600;
+  color: #0077b6;
+  margin: 0 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e5e7eb;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+section {
+  margin-bottom: 20px;
+}
+
+/* ================================
+   PATIENT INFO GRID
+   ================================ */
+.patient-info-grid {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.info-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.info-item.full-width {
+  flex: 2;
+}
+
+.info-label {
+  font-size: 8pt;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 3px;
+}
+
+.info-value {
+  font-size: 11pt;
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.arabic-text {
+  font-family: 'Noto Sans Arabic', 'Arial', sans-serif;
+  direction: rtl;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 9pt;
+  font-weight: 600;
+}
+
+/* ================================
+   TABLE STYLES
+   ================================ */
+.diagnosis-table,
+.surgery-table,
+.followup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+
+.diagnosis-table th,
+.surgery-table th,
+.followup-table th {
+  background: #0077b6;
+  color: white;
+  font-weight: 600;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.diagnosis-table td,
+.surgery-table td,
+.followup-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.diagnosis-table tbody tr:nth-child(even),
+.surgery-table tbody tr:nth-child(even),
+.followup-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.diagnosis-table tbody tr:hover,
+.surgery-table tbody tr:hover,
+.followup-table tbody tr:hover {
+  background: #f1f5f9;
+}
+
+/* ================================
+   NOTES SECTION
+   ================================ */
+.notes-content {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-left: 4px solid #f59e0b;
+  border-radius: 4px;
+  padding: 12px 15px;
+}
+
+.notes-content p {
+  margin: 0;
+  font-size: 10pt;
+  color: #78350f;
+  white-space: pre-wrap;
+}
+
+/* ================================
+   SIGNATURE SECTION
+   ================================ */
+.signature-section {
+  margin-top: 40px;
+  page-break-inside: avoid;
+}
+
+.signature-grid {
+  display: flex;
+  justify-content: space-between;
+  gap: 60px;
+}
+
+.signature-box {
+  flex: 1;
+  text-align: center;
+}
+
+.signature-line {
+  border-bottom: 1px solid #1f2937;
+  margin-bottom: 8px;
+  height: 40px;
+}
+
+.signature-name {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.signature-title {
+  font-size: 8pt;
+  color: #6b7280;
+  margin: 2px 0 0 0;
+}
+
+/* ================================
+   FOOTER STYLES
+   ================================ */
+.report-footer {
+  position: absolute;
+  bottom: 15mm;
+  left: 20mm;
+  right: 20mm;
+}
+
+.footer-divider {
+  height: 2px;
+  background: #e5e7eb;
+  margin-bottom: 10px;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 8pt;
+  color: #6b7280;
+}
+
+.footer-left,
+.footer-center,
+.footer-right {
+  flex: 1;
+}
+
+.footer-center {
+  text-align: center;
+}
+
+.footer-right {
+  text-align: right;
+}
+
+.confidential {
+  font-weight: 600;
+  color: #dc2626;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.footer-clinic {
+  margin: 3px 0 0 0;
+}
+
+.single-page-signature {
+  margin-top: auto;
+}
+
+.end-of-report {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 9pt;
+  color: #6b7280;
+}
+
+/* ================================
+   PRINT STYLES
+   ================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html, body {
+    width: 210mm;
+    height: 297mm;
+    margin: 0;
+    padding: 0;
+  }
+
+  .printable-report {
+    width: 210mm;
+    margin: 0;
+    padding: 0;
+  }
+
+  .report-page {
+    width: 210mm;
+    min-height: 297mm;
+    height: 297mm;
+    margin: 0;
+    padding: 15mm 20mm;
+    box-shadow: none;
+    page-break-after: always;
+    break-after: page;
+    overflow: hidden;
+  }
+
+  .report-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  /* Ensure colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Hide browser elements */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Prevent page breaks inside elements */
+  .patient-info-section,
+  .contact-section,
+  .diagnosis-section,
+  .notes-section {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Table pagination */
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Keep signature with content */
+  .signature-section {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* ================================
+   SCREEN PREVIEW STYLES
+   ================================ */
+@media screen {
+  .printable-report {
+    background: #f3f4f6;
+    padding: 20px;
+  }
+
+  .report-page {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+                0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    margin-bottom: 20px;
+  }
+
+  .report-page:last-child {
+    margin-bottom: 0;
+  }
+}

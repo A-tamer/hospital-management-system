@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, Download, LogIn, LogOut } from 'lucide-react';
+import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, Download, LogIn, LogOut, Printer } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { useLanguage } from '../context/LanguageContext';
 import { generatePDFReport } from '../utils/pdfGenerator';
 import { useToast } from '../components/Toast';
 import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
+import { PatientReportPrinter } from '../components/PrintableReport';
 
 const PatientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -198,6 +199,15 @@ const PatientDetail: React.FC = () => {
               <Download className="btn-icon" />
               {isExportingPDF ? (t('detail.exportingPDF') || 'Generating PDF...') : (t('detail.exportPDF') || 'Export PDF')}
             </button>
+            
+            {/* Print Professional Report */}
+            <PatientReportPrinter
+              patient={patient}
+              buttonStyle="compact"
+              showPreview={true}
+              doctorName="Dr. Wafa"
+              doctorTitle="MD, Surgeon"
+            />
             
             {/* Check-In / Check-Out Buttons */}
             {(patient as any).presentAtClinic ? (

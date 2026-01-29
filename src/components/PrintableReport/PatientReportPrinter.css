@@ -1,0 +1,220 @@
+/* PatientReportPrinter.css - Button and Preview Styles */
+
+/* ================================
+   PRINT BUTTON STYLES
+   ================================ */
+.print-btn-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.print-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'Inter', 'Roboto', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.print-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Primary Button */
+.print-btn-primary {
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #0077b6 0%, #00a8e8 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 119, 182, 0.2);
+}
+
+.print-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #006299 0%, #008cc4 100%);
+  box-shadow: 0 4px 8px rgba(0, 119, 182, 0.3);
+  transform: translateY(-1px);
+}
+
+.print-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 119, 182, 0.2);
+}
+
+/* Secondary Button */
+.print-btn-secondary {
+  padding: 10px 16px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.print-btn-secondary:hover:not(:disabled) {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+/* Icon Only Button */
+.print-btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+
+.print-btn-icon:hover:not(:disabled) {
+  background: #0077b6;
+  color: white;
+  border-color: #0077b6;
+}
+
+/* Compact Button */
+.print-btn-compact {
+  padding: 6px 12px;
+  font-size: 13px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.print-btn-compact:hover:not(:disabled) {
+  background: #0077b6;
+  color: white;
+  border-color: #0077b6;
+}
+
+/* ================================
+   PREVIEW MODAL STYLES
+   ================================ */
+.report-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  overflow: auto;
+}
+
+.report-preview-container {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 95vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.report-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  border-radius: 12px 12px 0 0;
+}
+
+.report-preview-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.report-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-preview-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  background: #f3f4f6;
+}
+
+/* Scale down for preview */
+.report-preview-content .printable-report {
+  transform-origin: top center;
+}
+
+.report-preview-content .report-page {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* ================================
+   RESPONSIVE STYLES
+   ================================ */
+@media (max-width: 768px) {
+  .print-btn-group {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .print-btn-group .print-btn {
+    width: 100%;
+  }
+
+  .report-preview-overlay {
+    padding: 10px;
+  }
+
+  .report-preview-container {
+    max-height: 100vh;
+    border-radius: 8px;
+  }
+
+  .report-preview-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .report-preview-actions {
+    width: 100%;
+  }
+
+  .report-preview-actions .print-btn {
+    flex: 1;
+  }
+
+  .report-preview-content {
+    padding: 10px;
+  }
+
+  /* Scale down preview on mobile */
+  .report-preview-content .printable-report {
+    transform: scale(0.5);
+    transform-origin: top left;
+  }
+}
+
+/* ================================
+   PRINT MEDIA - HIDE BUTTONS
+   ================================ */
+@media print {
+  .print-btn-group,
+  .print-btn,
+  .report-preview-overlay {
+    display: none !important;
+  }
+}
