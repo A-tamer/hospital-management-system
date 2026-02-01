@@ -22,7 +22,7 @@ interface PrintableReportProps {
 const defaultClinicInfo: PrintableReportProps['clinicInfo'] = {
   name: 'SurgiCare',
   tagline: 'Excellence in Pediatric Surgery',
-  address: 'Cairo Medical District, Egypt',
+  address: 'cairo, egypt',
   phone: '+20 123 456 7890',
   email: 'info@surgicare.com',
   website: 'www.surgicare.com',
@@ -53,32 +53,30 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
 
     const getStatusColor = (status: string) => {
       switch (status) {
-        case 'Diagnosed': return '#4f46e5'; // Primary indigo
-        case 'Pre-op': return '#f59e0b';    // Warning amber
-        case 'Op': return '#ef4444';         // Danger red
-        case 'Post-op': return '#10b981';    // Success green
-        default: return '#6b7280';           // Gray
+        case 'Diagnosed': return '#17a2b8'; // Teal
+        case 'Pre-op': return '#ffc107';    // Warning amber
+        case 'Op': return '#dc3545';         // Danger red
+        case 'Post-op': return '#28a745';    // Success green
+        default: return '#6c757d';           // Gray
       }
     };
 
-    const currentDate = new Date().toLocaleString('en-US', {
+    // Date only, no time
+    const currentDate = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     });
 
     return (
       <div ref={ref} className="printable-report">
-        {/* Page 1: Main Patient Information */}
         <div className="report-page">
           {/* Header */}
           <header className="report-header">
             <div className="header-left">
               <img 
                 src={clinicInfo?.logo || '/imgs/logo.jpg'} 
-                alt="SurgiCare Logo" 
+                alt="Logo" 
                 className="clinic-logo"
                 crossOrigin="anonymous"
               />
@@ -100,7 +98,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
           {/* Report Title */}
           <div className="report-title-section">
             <h2 className="report-title">{reportTitle}</h2>
-            <p className="report-generated">Generated on: {currentDate}</p>
+            <p className="report-generated">Generated on {currentDate}</p>
           </div>
 
           {/* Patient Information Section */}
@@ -172,22 +170,6 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                     <span className="info-value">{patient.contactInfo.relation || 'N/A'}</span>
                   </div>
                 </div>
-                {(patient.contactInfo.email || patient.contactInfo.address) && (
-                  <div className="info-row">
-                    {patient.contactInfo.email && (
-                      <div className="info-item">
-                        <span className="info-label">Email</span>
-                        <span className="info-value">{patient.contactInfo.email}</span>
-                      </div>
-                    )}
-                    {patient.contactInfo.address && (
-                      <div className="info-item full-width">
-                        <span className="info-label">Address</span>
-                        <span className="info-value">{patient.contactInfo.address}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </section>
           )}
@@ -195,25 +177,77 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
           {/* Diagnosis Section */}
           <section className="diagnosis-section">
             <h3 className="section-title">Diagnosis</h3>
-            <div className="diagnosis-content">
-              <table className="diagnosis-table">
+            <table className="diagnosis-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Diagnosis</th>
+                  <th>Referring Doctor</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>{patient.diagnosisCategory || 'General'}</td>
+                  <td>{patient.diagnosis || 'N/A'}</td>
+                  <td>{patient.referringDoctor || 'N/A'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          {/* Surgery History Section */}
+          {patient.surgeries && patient.surgeries.length > 0 && (
+            <section className="surgery-section">
+              <h3 className="section-title">Surgery History</h3>
+              <table className="surgery-table">
                 <thead>
                   <tr>
-                    <th>Category</th>
-                    <th>Diagnosis</th>
-                    <th>Referring Doctor</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Operation</th>
+                    <th>Surgeon(s)</th>
+                    <th>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>{patient.diagnosisCategory || 'General'}</td>
-                    <td>{patient.diagnosis || 'N/A'}</td>
-                    <td>{patient.referringDoctor || 'N/A'}</td>
-                  </tr>
+                  {patient.surgeries.map((surgery, index) => (
+                    <tr key={surgery.id || index}>
+                      <td>{formatDate(surgery.date)}</td>
+                      <td>{surgery.type || 'N/A'}</td>
+                      <td>{surgery.operation || 'N/A'}</td>
+                      <td>{surgery.surgeons?.map(s => s.name).join(', ') || 'N/A'}</td>
+                      <td>{surgery.notes || '-'}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-            </div>
-          </section>
+            </section>
+          )}
+
+          {/* Follow-ups Section */}
+          {patient.followUps && patient.followUps.length > 0 && (
+            <section className="followups-section">
+              <h3 className="section-title">Follow-up History</h3>
+              <table className="followup-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patient.followUps.map((followUp, index) => (
+                    <tr key={followUp.id || index}>
+                      <td>{followUp.number || index + 1}</td>
+                      <td>{formatDate(followUp.date)}</td>
+                      <td>{followUp.notes || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           {/* Clinical Notes */}
           {patient.notes && (
@@ -225,193 +259,38 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
             </section>
           )}
 
-          {/* Doctor Signature - Always show on page 1 if no surgeries */}
-          {(!patient.surgeries || patient.surgeries.length === 0) && (
-            <section className="signature-section page1-signature">
-              <div className="signature-single">
-                <div className="signature-box doctor-signature">
-                  {signatureImage && (
-                    <img 
-                      src={signatureImage} 
-                      alt="Doctor Signature" 
-                      className="signature-image"
-                      crossOrigin="anonymous"
-                    />
-                  )}
-                  <div className="signature-line"></div>
-                  <p className="signature-name">{doctorName}</p>
-                  <p className="signature-title">{doctorTitle}</p>
-                </div>
+          {/* Doctor Signature */}
+          <section className="signature-section">
+            <div className="signature-single">
+              <div className="signature-box doctor-signature">
+                {signatureImage && (
+                  <img 
+                    src={signatureImage} 
+                    alt="Signature" 
+                    className="signature-image"
+                    crossOrigin="anonymous"
+                  />
+                )}
+                <div className="signature-line"></div>
+                <p className="signature-name">{doctorName}</p>
+                <p className="signature-title">{doctorTitle}</p>
               </div>
-              <div className="end-of-report">
-                <p>****End of Report****</p>
-              </div>
-            </section>
-          )}
+            </div>
+          </section>
 
-          {/* Footer for Page 1 */}
+          {/* Footer */}
           <footer className="report-footer">
             <div className="footer-divider"></div>
             <div className="footer-content">
               <div className="footer-left">
-                <p className="confidential">CONFIDENTIAL - Medical Report</p>
                 <p className="footer-clinic">{clinicInfo?.name || 'SurgiCare'}</p>
               </div>
               <div className="footer-right">
-                <p>Page 1 of {patient.surgeries && patient.surgeries.length > 0 ? '2' : '1'}</p>
+                <p>Page 1 of 1</p>
               </div>
             </div>
           </footer>
         </div>
-
-        {/* Page 2: Surgery History (if exists) */}
-        {patient.surgeries && patient.surgeries.length > 0 && (
-          <div className="report-page page-break">
-            {/* Mini Header */}
-            <header className="report-header mini-header">
-              <div className="header-left">
-                <img 
-                  src={clinicInfo?.logo || '/imgs/logo.jpg'} 
-                  alt="SurgiCare Logo" 
-                  className="clinic-logo-small"
-                  crossOrigin="anonymous"
-                />
-                <h2 className="clinic-name-small">{clinicInfo?.name || 'SurgiCare'}</h2>
-              </div>
-              <div className="header-right">
-                <p><strong>Patient:</strong> {patient.fullNameArabic}</p>
-                <p><strong>Code:</strong> {patient.code}</p>
-              </div>
-            </header>
-
-            <div className="header-divider"></div>
-
-            {/* Surgery History */}
-            <section className="surgery-section">
-              <h3 className="section-title">Surgery History</h3>
-              <table className="surgery-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Operation</th>
-                    <th>Surgeon(s)</th>
-                    <th>Cost</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patient.surgeries.map((surgery, index) => (
-                    <tr key={surgery.id || index}>
-                      <td>{formatDate(surgery.date)}</td>
-                      <td>{surgery.type || 'N/A'}</td>
-                      <td>{surgery.operation || 'N/A'}</td>
-                      <td>
-                        {surgery.surgeons?.map(s => s.name).join(', ') || 'N/A'}
-                      </td>
-                      <td>
-                        {surgery.cost 
-                          ? `${surgery.cost.toLocaleString()} ${surgery.costCurrency || 'EGP'}`
-                          : 'N/A'
-                        }
-                      </td>
-                      <td>{surgery.notes || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            {/* Planned Surgery (if exists) */}
-            {patient.plannedSurgery && (
-              <section className="planned-surgery-section">
-                <h3 className="section-title">Planned Surgery</h3>
-                <div className="patient-info-grid">
-                  <div className="info-row">
-                    <div className="info-item">
-                      <span className="info-label">Category</span>
-                      <span className="info-value">{patient.plannedSurgery.operationCategory || 'N/A'}</span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-label">Operation</span>
-                      <span className="info-value">{patient.plannedSurgery.operation || 'N/A'}</span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-label">Estimated Cost</span>
-                      <span className="info-value">
-                        {patient.plannedSurgery.estimatedCost 
-                          ? `${patient.plannedSurgery.estimatedCost.toLocaleString()} ${patient.plannedSurgery.costCurrency || 'EGP'}`
-                          : 'N/A'
-                        }
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Follow-ups (if exists) */}
-            {patient.followUps && patient.followUps.length > 0 && (
-              <section className="followups-section">
-                <h3 className="section-title">Follow-up History</h3>
-                <table className="followup-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Date</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {patient.followUps.map((followUp, index) => (
-                      <tr key={followUp.id || index}>
-                        <td>{followUp.number || index + 1}</td>
-                        <td>{formatDate(followUp.date)}</td>
-                        <td>{followUp.notes || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            )}
-
-            {/* Doctor Signature Section */}
-            <section className="signature-section">
-              <div className="signature-single">
-                <div className="signature-box doctor-signature">
-                  {signatureImage && (
-                    <img 
-                      src={signatureImage} 
-                      alt="Doctor Signature" 
-                      className="signature-image"
-                      crossOrigin="anonymous"
-                    />
-                  )}
-                  <div className="signature-line"></div>
-                  <p className="signature-name">{doctorName}</p>
-                  <p className="signature-title">{doctorTitle}</p>
-                </div>
-              </div>
-            </section>
-
-            {/* Footer for Page 2 */}
-            <footer className="report-footer">
-              <div className="footer-divider"></div>
-              <div className="footer-content">
-                <div className="footer-left">
-                  <p className="confidential">CONFIDENTIAL - Medical Report</p>
-                  <p className="footer-clinic">{clinicInfo?.name || 'SurgiCare'}</p>
-                </div>
-                <div className="footer-center">
-                  <p>****End of Report****</p>
-                </div>
-                <div className="footer-right">
-                  <p>Page 2 of 2</p>
-                </div>
-              </div>
-            </footer>
-          </div>
-        )}
       </div>
     );
   }
