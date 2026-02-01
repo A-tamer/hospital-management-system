@@ -51,24 +51,23 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
       }
     };
 
-    const getStatusClass = (status: string) => {
+    const getStatusColor = (status: string) => {
       switch (status) {
-        case 'Diagnosed': return 'status-diagnosed';
-        case 'Pre-op': return 'status-preop';
-        case 'Op': return 'status-op';
-        case 'Post-op': return 'status-postop';
-        default: return 'status-default';
+        case 'Diagnosed': return '#4f46e5'; // Primary indigo
+        case 'Pre-op': return '#f59e0b';    // Warning amber
+        case 'Op': return '#ef4444';         // Danger red
+        case 'Post-op': return '#10b981';    // Success green
+        default: return '#6b7280';           // Gray
       }
     };
 
-    // Date only, no time
-    const currentDate = new Date().toLocaleDateString('en-US', {
+    const currentDate = new Date().toLocaleString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
-
-    const totalPages = patient.surgeries && patient.surgeries.length > 0 ? 2 : 1;
 
     return (
       <div ref={ref} className="printable-report">
@@ -79,7 +78,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
             <div className="header-left">
               <img 
                 src={clinicInfo?.logo || '/imgs/logo.jpg'} 
-                alt="Clinic Logo" 
+                alt="SurgiCare Logo" 
                 className="clinic-logo"
                 crossOrigin="anonymous"
               />
@@ -101,7 +100,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
           {/* Report Title */}
           <div className="report-title-section">
             <h2 className="report-title">{reportTitle}</h2>
-            <p className="report-generated">Generated on {currentDate}</p>
+            <p className="report-generated">Generated on: {currentDate}</p>
           </div>
 
           {/* Patient Information Section */}
@@ -139,7 +138,10 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                 </div>
                 <div className="info-item">
                   <span className="info-label">Status</span>
-                  <span className={`info-value status-badge ${getStatusClass(patient.status)}`}>
+                  <span 
+                    className="info-value status-badge"
+                    style={{ backgroundColor: getStatusColor(patient.status), color: 'white' }}
+                  >
                     {patient.status}
                   </span>
                 </div>
@@ -223,7 +225,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
             </section>
           )}
 
-          {/* Doctor Signature - Show on page 1 if no surgeries */}
+          {/* Doctor Signature - Always show on page 1 if no surgeries */}
           {(!patient.surgeries || patient.surgeries.length === 0) && (
             <section className="signature-section page1-signature">
               <div className="signature-single">
@@ -231,7 +233,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                   {signatureImage && (
                     <img 
                       src={signatureImage} 
-                      alt="Signature" 
+                      alt="Doctor Signature" 
                       className="signature-image"
                       crossOrigin="anonymous"
                     />
@@ -241,17 +243,22 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                   <p className="signature-title">{doctorTitle}</p>
                 </div>
               </div>
+              <div className="end-of-report">
+                <p>****End of Report****</p>
+              </div>
             </section>
           )}
 
           {/* Footer for Page 1 */}
           <footer className="report-footer">
+            <div className="footer-divider"></div>
             <div className="footer-content">
               <div className="footer-left">
+                <p className="confidential">CONFIDENTIAL - Medical Report</p>
                 <p className="footer-clinic">{clinicInfo?.name || 'SurgiCare'}</p>
               </div>
               <div className="footer-right">
-                <p>Page 1 of {totalPages}</p>
+                <p>Page 1 of {patient.surgeries && patient.surgeries.length > 0 ? '2' : '1'}</p>
               </div>
             </div>
           </footer>
@@ -265,7 +272,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
               <div className="header-left">
                 <img 
                   src={clinicInfo?.logo || '/imgs/logo.jpg'} 
-                  alt="Clinic Logo" 
+                  alt="SurgiCare Logo" 
                   className="clinic-logo-small"
                   crossOrigin="anonymous"
                 />
@@ -375,7 +382,7 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                   {signatureImage && (
                     <img 
                       src={signatureImage} 
-                      alt="Signature" 
+                      alt="Doctor Signature" 
                       className="signature-image"
                       crossOrigin="anonymous"
                     />
@@ -389,9 +396,14 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
 
             {/* Footer for Page 2 */}
             <footer className="report-footer">
+              <div className="footer-divider"></div>
               <div className="footer-content">
                 <div className="footer-left">
+                  <p className="confidential">CONFIDENTIAL - Medical Report</p>
                   <p className="footer-clinic">{clinicInfo?.name || 'SurgiCare'}</p>
+                </div>
+                <div className="footer-center">
+                  <p>****End of Report****</p>
                 </div>
                 <div className="footer-right">
                   <p>Page 2 of 2</p>
