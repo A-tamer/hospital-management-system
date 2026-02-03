@@ -33,8 +33,8 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [weight, setWeight] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
-  const [diagnosisCategory, setDiagnosisCategory] = useState('');
-  const [diagnosis, setDiagnosis] = useState('');
+  // Multiple diagnoses support
+  const [diagnoses, setDiagnoses] = useState<{ category: string; diagnosis: string }[]>([{ category: '', diagnosis: '' }]);
   const [visitedDate, setVisitedDate] = useState('');
   const [status, setStatus] = useState<'Diagnosed' | 'Pre-op' | 'Op' | 'Post-op'>('Diagnosed');
   const [notes, setNotes] = useState('');
@@ -108,8 +108,30 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
       
       setGender(patient.gender);
       setWeight((patient as any).weight?.toString() || '');
-      setDiagnosisCategory(patient.diagnosisCategory || '');
-      setDiagnosis(patient.diagnosis || '');
+      
+      // Handle multiple diagnoses (backward compatible with single diagnosis)
+      if ((patient as any).diagnoses && (patient as any).diagnoses.length > 0) {
+        // New format with multiple diagnoses
+        const loadedDiagnoses = (patient as any).diagnoses.map((d: string) => {
+          const match = d.match(/^(.+?) - (.+)$/);
+          if (match) {
+            return { category: match[1], diagnosis: d };
+          }
+          return { category: '', diagnosis: d };
+        });
+        setDiagnoses(loadedDiagnoses);
+      } else if (patient.diagnosis) {
+        // Old format with single diagnosis
+        const match = patient.diagnosis.match(/^(.+?) - (.+)$/);
+        if (match) {
+          setDiagnoses([{ category: match[1], diagnosis: patient.diagnosis }]);
+        } else {
+          setDiagnoses([{ category: patient.diagnosisCategory || '', diagnosis: patient.diagnosis }]);
+        }
+      } else {
+        setDiagnoses([{ category: '', diagnosis: '' }]);
+      }
+      
       setVisitedDate(patient.visitedDate || (patient as any).admissionDate || '');
       setStatus(patient.status);
       setNotes(patient.notes || '');
@@ -153,9 +175,32 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
   }, [patient, generateCode]);
 
   // Get subcategories for selected category
-  const getSubcategories = () => {
-    const category = DIAGNOSIS_CATEGORIES.find(c => c.category === diagnosisCategory);
+  const getSubcategories = (categoryName: string) => {
+    const category = DIAGNOSIS_CATEGORIES.find(c => c.category === categoryName);
     return category?.subcategories || [];
+  };
+
+  // Add a new diagnosis entry
+  const addDiagnosis = () => {
+    setDiagnoses([...diagnoses, { category: '', diagnosis: '' }]);
+  };
+
+  // Update a diagnosis entry
+  const updateDiagnosis = (index: number, field: 'category' | 'diagnosis', value: string) => {
+    const updated = [...diagnoses];
+    if (field === 'category') {
+      updated[index] = { category: value, diagnosis: '' };
+    } else {
+      updated[index] = { ...updated[index], diagnosis: value };
+    }
+    setDiagnoses(updated);
+  };
+
+  // Remove a diagnosis entry
+  const removeDiagnosis = (index: number) => {
+    if (diagnoses.length > 1) {
+      setDiagnoses(diagnoses.filter((_, i) => i !== index));
+    }
   };
 
   // Get operation subcategories for a given operation category
@@ -533,18 +578,33 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
       // Calculate age from date of birth
       const calculatedAge = calculateAge(dateOfBirth);
       
+      // Process multiple diagnoses
+      const validDiagnoses = diagnoses
+        .filter(d => d.diagnosis.trim())
+        .map(d => d.diagnosis.trim());
+      const primaryDiagnosis = validDiagnoses[0] || 'Undiagnosed';
+      const primaryCategory = diagnoses[0]?.category || '';
+      
       const patientData: Omit<Patient, 'id'> = {
         code,
         fullNameArabic: fullNameArabic.trim(),
         age: calculatedAge,
         gender,
-        diagnosis: diagnosis.trim() || 'Undiagnosed', // Default to 'Undiagnosed' if empty
+        diagnosis: primaryDiagnosis, // Primary diagnosis for backward compatibility
         visitedDate,
         status,
         notes: notes.trim(),
         createdAt: patient?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      
+      // Add multiple diagnoses
+      if (validDiagnoses.length > 0) {
+        (patientData as any).diagnoses = validDiagnoses;
+        (patientData as any).diagnosisCategories = diagnoses
+          .filter(d => d.diagnosis.trim())
+          .map(d => d.category);
+      }
       
       // Add date of birth and location info
       (patientData as any).dateOfBirth = dateOfBirth;
@@ -555,8 +615,8 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
       if (clinicBranch) (patientData as any).clinicBranch = clinicBranch;
       
       // Only add optional fields if they have values
-      if (diagnosisCategory) {
-        patientData.diagnosisCategory = diagnosisCategory;
+      if (primaryCategory) {
+        patientData.diagnosisCategory = primaryCategory;
       }
       if (contactInfo.name || contactInfo.phone) {
         patientData.contactInfo = contactInfo;
@@ -901,43 +961,70 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">{t('form.diagnosisCategory')}</label>
-                <select
-                  value={diagnosisCategory}
-                  onChange={(e) => {
-                    setDiagnosisCategory(e.target.value);
-                    setDiagnosis(''); // Reset diagnosis when category changes
-                  }}
-                  className="form-select"
-                >
-                  <option value="">{t('form.selectCategory')}</option>
-                  {DIAGNOSIS_CATEGORIES.map(cat => (
-                    <option key={cat.category} value={cat.category}>{cat.category}</option>
-                  ))}
-                </select>
+            {/* Multiple Diagnoses */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label className="form-label" style={{ margin: 0 }}>{t('form.diagnosis')} (Multiple allowed)</label>
+                <button type="button" onClick={addDiagnosis} className="btn btn-sm btn-secondary">
+                  <Plus style={{ width: '14px', height: '14px' }} />
+                  Add Diagnosis
+                </button>
               </div>
-              <div className="form-group">
-                <label className="form-label">{t('form.diagnosis')}</label>
-                <select
-                  value={diagnosis}
-                  onChange={(e) => setDiagnosis(e.target.value)}
-                  className={`form-select ${errors.diagnosis ? 'error' : ''}`}
-                  disabled={!diagnosisCategory}
-                >
-                  <option value="">Select diagnosis category first</option>
-                  {diagnosisCategory && getSubcategories().map(sub => (
-                    <option key={sub} value={`${diagnosisCategory} - ${sub}`}>
-                      {sub}
-                    </option>
-                  ))}
-                </select>
-                {errors.diagnosis && <span className="error-message">{errors.diagnosis}</span>}
-                <span style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.25rem', display: 'block' }}>
-                  Optional - Leave empty for undiagnosed patients
-                </span>
-              </div>
+              
+              {diagnoses.map((diagEntry, index) => (
+                <div key={index} style={{ 
+                  marginBottom: '0.75rem', 
+                  padding: '0.75rem', 
+                  background: index === 0 ? '#e8f4f8' : '#f8f9fa', 
+                  borderRadius: '8px',
+                  border: index === 0 ? '2px solid #17a2b8' : '1px solid #e0e0e0'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: '600' }}>
+                      {index === 0 ? 'Primary Diagnosis' : `Diagnosis ${index + 1}`}
+                    </span>
+                    {diagnoses.length > 1 && (
+                      <button type="button" onClick={() => removeDiagnosis(index)} className="btn btn-sm btn-danger" style={{ padding: '0.25rem 0.5rem' }}>
+                        <Trash2 style={{ width: '12px', height: '12px' }} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">{t('form.diagnosisCategory')}</label>
+                      <select
+                        value={diagEntry.category}
+                        onChange={(e) => updateDiagnosis(index, 'category', e.target.value)}
+                        className="form-select"
+                      >
+                        <option value="">{t('form.selectCategory')}</option>
+                        {DIAGNOSIS_CATEGORIES.map(cat => (
+                          <option key={cat.category} value={cat.category}>{cat.category}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{t('form.diagnosis')}</label>
+                      <select
+                        value={diagEntry.diagnosis}
+                        onChange={(e) => updateDiagnosis(index, 'diagnosis', e.target.value)}
+                        className="form-select"
+                        disabled={!diagEntry.category}
+                      >
+                        <option value="">Select diagnosis category first</option>
+                        {diagEntry.category && getSubcategories(diagEntry.category).map(sub => (
+                          <option key={sub} value={`${diagEntry.category} - ${sub}`}>
+                            {sub}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <span style={{ fontSize: '0.875rem', color: '#666', display: 'block' }}>
+                Optional - Leave empty for undiagnosed patients. Add multiple diagnoses if needed.
+              </span>
             </div>
 
             {/* Planned Surgery - Inline in clinical info */}

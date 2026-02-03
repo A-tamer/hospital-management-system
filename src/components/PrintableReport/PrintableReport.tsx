@@ -186,11 +186,24 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>{patient.diagnosisCategory || 'General'}</td>
-                  <td>{patient.diagnosis || 'N/A'}</td>
-                  <td>{patient.referringDoctor || 'N/A'}</td>
-                </tr>
+                {((patient as any).diagnoses && (patient as any).diagnoses.length > 0) ? (
+                  (patient as any).diagnoses.map((diag: string, index: number) => {
+                    const categories = (patient as any).diagnosisCategories || [];
+                    return (
+                      <tr key={index}>
+                        <td>{categories[index] || patient.diagnosisCategory || 'General'}</td>
+                        <td>{diag}</td>
+                        <td>{index === 0 ? (patient.referringDoctor || 'N/A') : ''}</td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td>{patient.diagnosisCategory || 'General'}</td>
+                    <td>{patient.diagnosis || 'N/A'}</td>
+                    <td>{patient.referringDoctor || 'N/A'}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </section>

@@ -33,7 +33,7 @@ const Patients: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(100);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
   const [updatingPresence, setUpdatingPresence] = useState<string | null>(null);
@@ -81,16 +81,24 @@ const Patients: React.FC = () => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       const searchArabic = filters.search; // Keep original for Arabic search
-      filtered = filtered.filter(patient =>
-        (patient.fullNameArabic && patient.fullNameArabic.includes(searchArabic)) ||
-        patient.code.toLowerCase().includes(searchLower) ||
-        patient.diagnosis.toLowerCase().includes(searchLower)
-      );
+      filtered = filtered.filter(patient => {
+        // Check name and code
+        if ((patient.fullNameArabic && patient.fullNameArabic.includes(searchArabic)) ||
+            patient.code.toLowerCase().includes(searchLower)) {
+          return true;
+        }
+        // Check all diagnoses
+        const allDiagnoses = (patient as any).diagnoses || [patient.diagnosis];
+        return allDiagnoses.some((d: string) => d && d.toLowerCase().includes(searchLower));
+      });
     }
 
     // Diagnosis filter
     if (filters.diagnosis) {
-      filtered = filtered.filter(patient => patient.diagnosis === filters.diagnosis);
+      filtered = filtered.filter(patient => {
+        const allDiagnoses = (patient as any).diagnoses || [patient.diagnosis];
+        return allDiagnoses.includes(filters.diagnosis);
+      });
     }
 
     // Status filter
@@ -503,7 +511,8 @@ const Patients: React.FC = () => {
                 </tr>
               ) : (
                 paginatedPatients.map((patient) => {
-                  const isUndiagnosed = !patient.diagnosis || patient.diagnosis === 'Undiagnosed';
+                  const allDiagnoses = (patient as any).diagnoses || (patient.diagnosis ? [patient.diagnosis] : []);
+                  const isUndiagnosed = allDiagnoses.length === 0 || (allDiagnoses.length === 1 && allDiagnoses[0] === 'Undiagnosed');
                   return (
                   <tr 
                     key={patient.id}
@@ -557,7 +566,22 @@ const Patients: React.FC = () => {
                             ⚠️ Undiagnosed
                           </span>
                         ) : (
-                          patient.diagnosis
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            {allDiagnoses.slice(0, 2).map((diag: string, idx: number) => (
+                              <span key={idx} style={{ 
+                                fontSize: idx === 0 ? '0.9rem' : '0.8rem',
+                                fontWeight: idx === 0 ? '500' : '400',
+                                color: idx === 0 ? '#333' : '#666'
+                              }}>
+                                {diag}
+                              </span>
+                            ))}
+                            {allDiagnoses.length > 2 && (
+                              <span style={{ fontSize: '0.75rem', color: '#17a2b8', fontWeight: '500' }}>
+                                +{allDiagnoses.length - 2} more
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </td>

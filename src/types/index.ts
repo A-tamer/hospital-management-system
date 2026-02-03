@@ -59,8 +59,10 @@ export interface Patient {
   age: number;
   weight?: number; // Weight in kg
   gender: 'Male' | 'Female' | 'Other';
-  diagnosis: string;
-  diagnosisCategory?: string; // For hierarchy
+  diagnosis: string; // Primary diagnosis (kept for backward compatibility)
+  diagnoses?: string[]; // Multiple diagnoses support
+  diagnosisCategory?: string; // For hierarchy (primary)
+  diagnosisCategories?: string[]; // Multiple categories
   visitedDate: string; // Changed from admissionDate
   status: 'Diagnosed' | 'Pre-op' | 'Op' | 'Post-op'; // Updated status with Op
   notes: string;

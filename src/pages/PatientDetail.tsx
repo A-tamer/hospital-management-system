@@ -322,18 +322,38 @@ const PatientDetail: React.FC = () => {
             )}
             <div className="info-item" style={{ gridColumn: 'span 2' }}>
               <span className="info-label">{t('patients.diagnosis')}</span>
-              <span className="info-value" style={{ 
-                fontSize: '1.1rem', 
-                fontWeight: '600', 
-                color: 'var(--primary-blue)',
-                padding: '0.75rem',
-                background: 'rgba(58, 175, 169, 0.1)',
-                borderRadius: '8px',
-                display: 'inline-block',
-                marginTop: '0.5rem'
-              }}>
-                {patient.diagnosis}
-              </span>
+              <div style={{ marginTop: '0.5rem' }}>
+                {((patient as any).diagnoses && (patient as any).diagnoses.length > 0) ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {(patient as any).diagnoses.map((diag: string, index: number) => (
+                      <span key={index} className="info-value" style={{ 
+                        fontSize: index === 0 ? '1.1rem' : '1rem', 
+                        fontWeight: index === 0 ? '600' : '500', 
+                        color: index === 0 ? 'var(--primary-blue)' : '#555',
+                        padding: '0.75rem',
+                        background: index === 0 ? 'rgba(58, 175, 169, 0.1)' : 'rgba(108, 117, 125, 0.1)',
+                        borderRadius: '8px',
+                        display: 'inline-block'
+                      }}>
+                        {index === 0 && <span style={{ fontSize: '0.7rem', color: '#17a2b8', display: 'block', marginBottom: '0.25rem' }}>Primary</span>}
+                        {diag}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="info-value" style={{ 
+                    fontSize: '1.1rem', 
+                    fontWeight: '600', 
+                    color: 'var(--primary-blue)',
+                    padding: '0.75rem',
+                    background: 'rgba(58, 175, 169, 0.1)',
+                    borderRadius: '8px',
+                    display: 'inline-block'
+                  }}>
+                    {patient.diagnosis || 'Undiagnosed'}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="info-item">
               <span className="info-label">{t('patients.visitedDate')}</span>

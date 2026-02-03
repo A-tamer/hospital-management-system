@@ -25,7 +25,9 @@ interface Patient {
   weight?: number;
   gender: string;
   diagnosis: string;
+  diagnoses?: string[];
   diagnosisCategory?: string;
+  diagnosisCategories?: string[];
   visitedDate: string;
   status: string;
   notes: string;
@@ -88,6 +90,8 @@ async function getSheetsClient() {
 function formatPatientRow(patient: Patient): (string | number)[] {
   const surgeries = patient.surgeries || [];
   const latestSurgery = surgeries[surgeries.length - 1];
+  // Get all diagnoses (support both old single and new multiple format)
+  const allDiagnoses = patient.diagnoses || (patient.diagnosis ? [patient.diagnosis] : []);
 
   return [
     patient.code || "",
@@ -96,7 +100,8 @@ function formatPatientRow(patient: Patient): (string | number)[] {
     patient.age || 0,
     patient.weight || "",
     patient.gender || "",
-    patient.diagnosis || "",
+    allDiagnoses[0] || "", // Primary diagnosis
+    allDiagnoses.slice(1).join("; ") || "", // Additional diagnoses
     patient.diagnosisCategory || "",
     patient.status || "",
     patient.visitedDate || "",
@@ -167,7 +172,8 @@ async function backupToSheets(spreadsheetId: string): Promise<{
     "Age",
     "Weight (kg)",
     "Gender",
-    "Diagnosis",
+    "Primary Diagnosis",
+    "Additional Diagnoses",
     "Diagnosis Category",
     "Status",
     "Visited Date",

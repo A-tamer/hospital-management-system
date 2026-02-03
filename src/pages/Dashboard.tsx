@@ -29,9 +29,14 @@ const Dashboard: React.FC = () => {
     const opPatients = patients.filter(p => p.status === 'Op').length;
     const postOpPatients = patients.filter(p => p.status === 'Post-op').length;
 
-    // Group by diagnosis
+    // Group by diagnosis (count all diagnoses)
     const patientsByDiagnosis = patients.reduce((acc, patient) => {
-      acc[patient.diagnosis] = (acc[patient.diagnosis] || 0) + 1;
+      const allDiagnoses = (patient as any).diagnoses || (patient.diagnosis ? [patient.diagnosis] : []);
+      allDiagnoses.forEach((diag: string) => {
+        if (diag && diag !== 'Undiagnosed') {
+          acc[diag] = (acc[diag] || 0) + 1;
+        }
+      });
       return acc;
     }, {} as { [key: string]: number });
 
@@ -315,7 +320,13 @@ const Dashboard: React.FC = () => {
                           alignItems: 'center',
                           gap: '0.5rem'
                         }}>
-                          {patient.diagnosis || 'Undiagnosed'} • {ageDisplay}
+                          {((patient as any).diagnoses && (patient as any).diagnoses.length > 0) 
+                            ? (patient as any).diagnoses[0] 
+                            : (patient.diagnosis || 'Undiagnosed')}
+                          {(patient as any).diagnoses && (patient as any).diagnoses.length > 1 && (
+                            <span style={{ fontSize: '0.8rem', color: '#17a2b8' }}>+{(patient as any).diagnoses.length - 1}</span>
+                          )}
+                          {' • '}{ageDisplay}
                         </p>
                       </div>
                       <span style={{

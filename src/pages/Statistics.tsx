@@ -46,9 +46,14 @@ const Statistics: React.FC = () => {
   const chartData = useMemo(() => {
     const patients = state.patients;
 
-    // Diagnosis distribution
+    // Diagnosis distribution (count all diagnoses)
     const diagnosisData = patients.reduce((acc, patient) => {
-      acc[patient.diagnosis] = (acc[patient.diagnosis] || 0) + 1;
+      const allDiagnoses = (patient as any).diagnoses || (patient.diagnosis ? [patient.diagnosis] : []);
+      allDiagnoses.forEach((diag: string) => {
+        if (diag && diag !== 'Undiagnosed') {
+          acc[diag] = (acc[diag] || 0) + 1;
+        }
+      });
       return acc;
     }, {} as { [key: string]: number });
 
