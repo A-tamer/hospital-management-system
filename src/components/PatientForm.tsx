@@ -1005,19 +1005,29 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
                     </div>
                     <div className="form-group">
                       <label className="form-label">{t('form.diagnosis')}</label>
-                      <select
-                        value={diagEntry.diagnosis}
-                        onChange={(e) => updateDiagnosis(index, 'diagnosis', e.target.value)}
-                        className="form-select"
-                        disabled={!diagEntry.category}
-                      >
-                        <option value="">Select diagnosis category first</option>
-                        {diagEntry.category && getSubcategories(diagEntry.category).map(sub => (
-                          <option key={sub} value={`${diagEntry.category} - ${sub}`}>
-                            {sub}
-                          </option>
-                        ))}
-                      </select>
+                      {diagEntry.category === 'Other' ? (
+                        <input
+                          type="text"
+                          value={diagEntry.diagnosis.replace('Other - ', '')}
+                          onChange={(e) => updateDiagnosis(index, 'diagnosis', e.target.value ? `Other - ${e.target.value}` : '')}
+                          className="form-input"
+                          placeholder="Enter custom diagnosis..."
+                        />
+                      ) : (
+                        <select
+                          value={diagEntry.diagnosis}
+                          onChange={(e) => updateDiagnosis(index, 'diagnosis', e.target.value)}
+                          className="form-select"
+                          disabled={!diagEntry.category}
+                        >
+                          <option value="">Select diagnosis category first</option>
+                          {diagEntry.category && getSubcategories(diagEntry.category).map(sub => (
+                            <option key={sub} value={`${diagEntry.category} - ${sub}`}>
+                              {sub}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1054,19 +1064,29 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
                 </div>
                 <div className="form-group">
                   <label className="form-label">Planned Operation</label>
-                  <select
-                    value={plannedSurgery.operation || ''}
-                    onChange={(e) => setPlannedSurgery({ ...plannedSurgery, operation: e.target.value })}
-                    className="form-select"
-                    disabled={!plannedSurgeryOperationCategory}
-                  >
-                    <option value="">Select Operation</option>
-                    {plannedSurgeryOperationCategory && getOperationSubcategories(plannedSurgeryOperationCategory).map(sub => (
-                      <option key={sub} value={`${plannedSurgeryOperationCategory} - ${sub}`}>
-                        {sub}
-                      </option>
-                    ))}
-                  </select>
+                  {plannedSurgeryOperationCategory === 'Other' ? (
+                    <input
+                      type="text"
+                      value={(plannedSurgery.operation || '').replace('Other - ', '')}
+                      onChange={(e) => setPlannedSurgery({ ...plannedSurgery, operation: e.target.value ? `Other - ${e.target.value}` : '' })}
+                      className="form-input"
+                      placeholder="Enter custom operation..."
+                    />
+                  ) : (
+                    <select
+                      value={plannedSurgery.operation || ''}
+                      onChange={(e) => setPlannedSurgery({ ...plannedSurgery, operation: e.target.value })}
+                      className="form-select"
+                      disabled={!plannedSurgeryOperationCategory}
+                    >
+                      <option value="">Select Operation</option>
+                      {plannedSurgeryOperationCategory && getOperationSubcategories(plannedSurgeryOperationCategory).map(sub => (
+                        <option key={sub} value={`${plannedSurgeryOperationCategory} - ${sub}`}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -1452,7 +1472,15 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
                   </div>
                   <div className="form-group">
                     <label className="form-label">Operation</label>
-                    {surgeryOperationCategories[index] ? (
+                    {surgeryOperationCategories[index] === 'Other' ? (
+                      <input
+                        type="text"
+                        value={(surgery.operation || '').replace('Other - ', '')}
+                        onChange={(e) => updateSurgery(index, 'operation', e.target.value ? `Other - ${e.target.value}` : '')}
+                        className="form-input"
+                        placeholder="Enter custom operation..."
+                      />
+                    ) : surgeryOperationCategories[index] ? (
                       <select
                         value={surgery.operation || ''}
                         onChange={(e) => updateSurgery(index, 'operation', e.target.value)}
