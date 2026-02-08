@@ -21,11 +21,11 @@ interface PrintableReportProps {
 
 const defaultClinicInfo: PrintableReportProps['clinicInfo'] = {
   name: 'SurgiCare',
-  tagline: 'Excellence in Pediatric Surgery',
+  tagline: '',
   address: 'cairo, egypt',
-  phone: '+20 123 456 7890',
-  email: 'info@surgicare.com',
-  website: 'www.surgicare.com',
+  phone: '+201016077676',
+  email: 'Surgicareped@gmail.com',
+  website: 'Facebook.com/surgicareped',
   logo: '/imgs/logo.jpg',
 };
 
@@ -118,7 +118,38 @@ const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
               <div className="info-row">
                 <div className="info-item">
                   <span className="info-label">Age</span>
-                  <span className="info-value">{patient.age ? `${patient.age} Years` : 'N/A'}</span>
+                  <span className="info-value">
+                    {(() => {
+                      if ((patient as any).dateOfBirth) {
+                        const dob = new Date((patient as any).dateOfBirth);
+                        const today = new Date();
+                        let years = today.getFullYear() - dob.getFullYear();
+                        let months = today.getMonth() - dob.getMonth();
+                        let days = today.getDate() - dob.getDate();
+                        
+                        if (days < 0) {
+                          months--;
+                          days += new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+                        }
+                        if (months < 0) {
+                          years--;
+                          months += 12;
+                        }
+                        
+                        if (years > 0) {
+                          return months > 0 ? `${years} years ${months} months` : `${years} years`;
+                        } else if (months > 0) {
+                          return days > 0 ? `${months} months ${days} days` : `${months} months`;
+                        } else {
+                          return `${days} days`;
+                        }
+                      } else {
+                        const years = Math.floor(patient.age);
+                        const months = Math.round((patient.age - years) * 12);
+                        return months > 0 ? `${years} years ${months} months` : `${years} years`;
+                      }
+                    })()}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="info-label">Gender</span>

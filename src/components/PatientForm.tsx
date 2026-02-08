@@ -16,9 +16,10 @@ interface PatientFormProps {
   onClose: () => void;
   generateCode: () => string;
   allPatients?: Patient[];
+  stayOnPageAfterUpdate?: boolean; // New prop to control navigation
 }
 
-const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCode, allPatients = [] }) => {
+const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCode, allPatients = [], stayOnPageAfterUpdate = false }) => {
   const { addPatient, updatePatient, isLoading, error } = useFirebaseOperations();
   const { state } = usePatientContext();
   const { t } = useLanguage();
@@ -189,7 +190,15 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
   const updateDiagnosis = (index: number, field: 'category' | 'diagnosis', value: string) => {
     const updated = [...diagnoses];
     if (field === 'category') {
-      updated[index] = { category: value, diagnosis: '' };
+      // When changing category, preserve "Other - " prefix if new category is Other
+      const oldDiagnosis = updated[index].diagnosis;
+      if (value === 'Other' && oldDiagnosis && !oldDiagnosis.startsWith('Other - ')) {
+        updated[index] = { category: value, diagnosis: '' };
+      } else if (value !== 'Other' && oldDiagnosis && oldDiagnosis.startsWith('Other - ')) {
+        updated[index] = { category: value, diagnosis: '' };
+      } else {
+        updated[index] = { category: value, diagnosis: '' };
+      }
     } else {
       updated[index] = { ...updated[index], diagnosis: value };
     }
@@ -673,12 +682,15 @@ const PatientForm: React.FC<PatientFormProps> = ({ patient, onClose, generateCod
       if (patient) {
         await updatePatient(patient.id, patientData);
         showSuccess(t('form.patientUpdated') || 'Patient information has been updated');
+        // If stayOnPageAfterUpdate is true, don't close the form
+        if (!stayOnPageAfterUpdate) {
+          onClose();
+        }
       } else {
         await addPatient(patientData);
         showSuccess(t('form.patientAdded') || 'New patient has been added to the system');
+        onClose();
       }
-
-      onClose();
     } catch (error) {
       console.error('Error saving patient:', error);
       showError(t('form.saveError') || 'Unable to save patient information. Please check your connection and try again.');

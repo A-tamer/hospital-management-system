@@ -1,22 +1,42 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Edit, Calendar, Phone, User, Heart, FileText, Image as ImageIcon, UserCircle, LogIn, LogOut } from 'lucide-react';
 import { usePatientContext } from '../context/PatientContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../components/Toast';
 import { useFirebaseOperations } from '../hooks/useFirebaseOperations';
 import { PatientReportPrinter } from '../components/PrintableReport';
+import PatientForm from '../components/PatientForm';
 
 const PatientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { state } = usePatientContext();
   const { t } = useLanguage();
   const { showSuccess, showError } = useToast();
   const { updatePatient } = useFirebaseOperations();
   const [isUpdatingPresence, setIsUpdatingPresence] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const patient = state.patients.find(p => p.id === id);
+
+  // Define handlers before early return
+  const handleBackToPatients = () => {
+    // Get saved filter state from sessionStorage
+    const savedFilters = sessionStorage.getItem('patientFilters');
+    if (savedFilters) {
+      navigate('/patients', { state: { restoreFilters: JSON.parse(savedFilters) } });
+    } else {
+      navigate('/patients');
+    }
+  };
+
+  const generatePatientCode = () => {
+    const allCodes = state.patients.map(p => parseInt(p.code)).filter(c => !isNaN(c));
+    const maxCode = allCodes.length > 0 ? Math.max(...allCodes) : 0;
+    return (maxCode + 1).toString().padStart(4, '0');
+  };
 
   if (!patient) {
     return (
@@ -25,7 +45,7 @@ const PatientDetail: React.FC = () => {
           <div className="empty-state">
             <User className="empty-icon" />
             <p>{t('detail.patientNotFound')}</p>
-            <button className="btn btn-primary" onClick={() => navigate('/patients')}>
+            <button className="btn btn-primary" onClick={handleBackToPatients}>
               <ArrowLeft className="btn-icon" />
               {t('detail.backToPatients')}
             </button>
@@ -36,7 +56,11 @@ const PatientDetail: React.FC = () => {
   }
 
   const handleEdit = () => {
-    navigate(`/patients`, { state: { editPatientId: patient.id } });
+    setShowEditForm(true);
+  };
+
+  const handleCloseEditForm = () => {
+    setShowEditForm(false);
   };
 
   const handleCheckIn = async () => {
@@ -171,7 +195,7 @@ const PatientDetail: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => navigate('/patients')}>
+            <button className="btn btn-secondary" onClick={handleBackToPatients}>
               <ArrowLeft className="btn-icon" />
               {t('detail.backToPatients')}
             </button>
@@ -1085,6 +1109,17 @@ const PatientDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Edit Patient Form Modal */}
+      {showEditForm && (
+        <PatientForm
+          patient={patient}
+          onClose={handleCloseEditForm}
+          generateCode={generatePatientCode}
+          allPatients={state.patients}
+          stayOnPageAfterUpdate={false}
+        />
+      )}
     </div>
   );
 };

@@ -68,9 +68,9 @@ const PatientReportPrinter: React.FC<PatientReportPrinterProps> = ({
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
         
-        // Render page to canvas with high quality
+        // Render page to canvas with optimized quality
         const canvas = await html2canvas(page, {
-          scale: 4, // Higher scale for better quality
+          scale: 2, // Balanced quality and file size
           useCORS: true,
           allowTaint: true,
           backgroundColor: '#ffffff',
@@ -79,7 +79,8 @@ const PatientReportPrinter: React.FC<PatientReportPrinterProps> = ({
           windowHeight: page.scrollHeight,
         });
 
-        const imgData = canvas.toDataURL('image/png', 1.0);
+        // Convert to JPEG with compression for smaller file size
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
         
         // Calculate dimensions to fit A4
         const imgWidth = a4Width;
@@ -89,7 +90,7 @@ const PatientReportPrinter: React.FC<PatientReportPrinterProps> = ({
           pdf.addPage();
         }
 
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, Math.min(imgHeight, a4Height));
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, Math.min(imgHeight, a4Height));
       }
 
       // Generate filename

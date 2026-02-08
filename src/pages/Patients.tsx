@@ -37,10 +37,31 @@ const Patients: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
   const [updatingPresence, setUpdatingPresence] = useState<string | null>(null);
+  
+  // Initialize filters state first
+  const [filters, setFilters] = useState<FilterOptions>({
+    search: '',
+    diagnosis: '',
+    status: '',
+    year: '',
+    month: '',
+    sortBy: 'name',
+    sortOrder: 'asc',
+    presentOnly: false,
+  });
 
-  // Check if we need to open edit form from navigation state
+  // Check if we need to open edit form from navigation state OR restore filters
   useEffect(() => {
-    const navState = location.state as { editPatientId?: string; showPresentOnly?: boolean; filterStatus?: string } | null;
+    const navState = location.state as { editPatientId?: string; showPresentOnly?: boolean; filterStatus?: string; restoreFilters?: FilterOptions } | null;
+    
+    // Restore filters if coming back from patient detail
+    if (navState?.restoreFilters) {
+      setFilters(navState.restoreFilters);
+      // Clear state after using it
+      navigate(location.pathname, { replace: true, state: {} });
+      return;
+    }
+    
     if (navState?.editPatientId) {
       const patient = state.patients.find((p: Patient) => p.id === navState.editPatientId);
       if (patient) {
@@ -63,16 +84,11 @@ const Patients: React.FC = () => {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, state.patients, navigate, location.pathname]);
-  const [filters, setFilters] = useState<FilterOptions>({
-    search: '',
-    diagnosis: '',
-    status: '',
-    year: '',
-    month: '',
-    sortBy: 'name',
-    sortOrder: 'asc',
-    presentOnly: false,
-  });
+  
+  // Save filters to sessionStorage whenever they change
+  useEffect(() => {
+    sessionStorage.setItem('patientFilters', JSON.stringify(filters));
+  }, [filters]);
 
   const filteredPatients = useMemo(() => {
     let filtered = state.patients;
